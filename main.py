@@ -45,7 +45,9 @@ DESCRIPCIONES_COLUMNAS = {
     'Demanda_Diaria': 'Calculado - Demanda_Mensual / 30 (consumo promedio por dia)',
     'Cobertura_Dias': 'Parametro (config.py) - dias de cobertura segun la rotacion',
     'Stock_Seguridad': 'Calculado - demanda diaria x dias de seguridad',
-    'Necesidad_Mensual': 'Calculado - demanda x (cobertura + lead time) + stock de seguridad',
+    'Necesidad_Disp': 'Calculado - unidades objetivo del canal dispensacion (demanda_disp/30 x factor_disp, dias de config *_DISP)',
+    'Necesidad_Rem': 'Calculado - unidades objetivo del canal remisiones (demanda_rem/30 x factor_remi, dias de config *_REMI)',
+    'Necesidad_Mensual': 'Calculado - Necesidad_Disp + Necesidad_Rem (necesidad total del producto)',
     'Cantidad_a_Pedir_Rest_Inv': 'Calculado - Pedir_Dispensacion_Total + Pedir_Remisiones (cada canal con su stock)',
     'Pedir_Dispensacion_Total': 'Calculado - pedido del canal dispensacion vs stock total (bodega + puntos)',
     'Pedir_NEPS_Capita': 'Calculado - parte del pedido de dispensacion segun peso historico de Capita',
@@ -124,11 +126,11 @@ def construir_hojas(processor):
 
     # ---------------------------------------------------------- DISPENSACION
 
-    colsDisp =['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula', 'Grupo', 'Proveedor',
+    colsDisp =['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula','Nombre Comercial', 'Grupo', 'Proveedor',
             'Costo Promedio', 'Ultimo Costo', 'Consumo_NEPS_Capita','Consumo_NEPS_Evento',
             'Consumo_FOMAG_Evento', 'Consumo_Sin_Clasificar', 'Consumo_Dispensacion_Total',
             *mensuales_disp, 'Demanda_Disp_Mensual', 'Rotacion_Dispensacion', 'Stock_Bodega_Principal',
-            'Stock_Puntos_Dispensacion', 'Stock_Total', 'Pedir_NEPS_Capita', 'Pedir_NEPS_Evento',
+            'Stock_Puntos_Dispensacion', 'Stock_Total', 'Necesidad_Disp', 'Pedir_NEPS_Capita', 'Pedir_NEPS_Evento',
             'Pedir_FOMAG_Evento', 'Pedir_Dispensacion_Total', 'Estado', 'Valorizado Ult Costo', 'Valorizado Promedio']
     mask = (df.get('Consumo_Dispensacion_Total', 0) > 0) | (df.get('Pedir_Dispensacion_Total', 0) > 0)
     disp = (df.loc[mask, [c for c in colsDisp if c in df.columns]]
@@ -139,9 +141,9 @@ def construir_hojas(processor):
     # ------------------------------------------------------------ REMISIONES
     # Remisiones son clientes distintos: el stock de puntos NO les aplica (ni se
     # muestra ni interviene en el pedido). Solo bodega principal.
-    colsRem = ['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula', 'Grupo', 'Proveedor',
+    colsRem = ['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula','Nombre Comercial', 'Grupo', 'Proveedor',
                'Costo Promedio', 'Ultimo Costo', *mensuales_rem, 'Consumo_Remisiones','Demanda_Rem_Mensual',
-               'Rotacion_Remisiones','Stock_Bodega_Principal', 'Sotck_Bodega_Dispensacion', 'Stock_Total','Pedir_Remisiones',
+               'Rotacion_Remisiones','Stock_Bodega_Principal', 'Sotck_Bodega_Dispensacion', 'Stock_Total','Necesidad_Rem','Pedir_Remisiones',
                'Estado', 'Valorizado Ult Costo', 'Valorizado Promedio']
     mask = (df.get('Consumo_Remisiones', 0) > 0) | (df.get('Pedir_Remisiones', 0) > 0)
     rem = (df.loc[mask, [c for c in colsRem if c in df.columns]]
@@ -150,13 +152,13 @@ def construir_hojas(processor):
     hojas['Remisiones'] = rem
 
     # ------------------------------------------------------------------ TODO
-    colsTodo = ['Codigo', 'Nombre','Nombre Comercial', 'Codigo_Molecula', 'Molecula', 'Grupo', 'Proveedor',
+    colsTodo = ['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula','Nombre Comercial', 'Grupo', 'Proveedor',
                 'Costo Promedio', 'Ultimo Costo', 'Consumo_Molecula', 'Consumo_NEPS_Capita',
                 'Consumo_NEPS_Evento', 'Consumo_FOMAG_Evento', 'Consumo_Dispensacion_Total',
                 'Consumo_Remisiones', 'Consumo_Sin_Clasificar', *mensuales, 'Consumo_Acum',
                 'Rotacion', 'Rotacion_Dispensacion', 'Rotacion_Remisiones','Demanda_Disp_Mensual',
-                'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria', 'Cobertura_Dias', 'Stock_Seguridad',
-                'Necesidad_Mensual','Valorizado Promedio Sin Rest Inv','Valorizado Ult Costo Sin Rest Inv', 'Stock_Bodega_Principal',
+                'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria',
+                'Necesidad_Disp','Necesidad_Rem','Necesidad_Mensual','Valorizado Promedio Sin Rest Inv','Valorizado Ult Costo Sin Rest Inv', 'Stock_Bodega_Principal',
                 'Stock_Puntos_Dispensacion','Stock_Total','Cantidad_a_Pedir_Rest_Inv',
                 'Valorizado Promedio','Valorizado Ult Costo','Pedir_NEPS_Capita', 'Pedir_NEPS_Evento','Pedir_FOMAG_Evento',
                 'Pedir_Dispensacion_Total','Pedir_Remisiones','Estado']
@@ -164,7 +166,7 @@ def construir_hojas(processor):
                      .sort_values('Cantidad_a_Pedir_Rest_Inv', ascending=False))
 
     # -------------------------------------------------------------- MOLECULA
-    cols = ['Codigo_Molecula', 'Molecula', 'N_Productos', 'Rotacion',
+    cols = ['Codigo_Molecula', 'Molecula','Nombre Comercial', 'N_Productos', 'Rotacion',
             'Consumo_Molecula', 'Stock_Total', 'Demanda_Mensual', 'Demanda_Diaria', 'Cobertura_Dias',
             'Stock_Seguridad', 'Necesidad_Mensual',
             'Cantidad_a_Pedir_Rest_Inv', 'Pedir_Dispensacion_Total', *pedir_contratos]

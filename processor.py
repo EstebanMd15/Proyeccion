@@ -55,9 +55,12 @@ class ProyeccionProcessor:
         # Parametros del motor: se diligencian en config.py. Un valor pasado al
         # constructor tiene prioridad (para pruebas puntuales).
         self.criterio_rotacion = criterio_rotacion or getattr(config, 'CRITERIO_ROTACION', 'volumen')
-        self.cobertura_dias = getattr(config, 'COBERTURA_DIAS', {'A': 30, 'M': 30, 'B': 30})
-        self.lead_time_dias = getattr(config, 'LEAD_TIME_DIAS', 30)
-        self.dias_seguridad = getattr(config, 'DIAS_SEGURIDAD', 15)
+        self.cobertura_dias_DISP = getattr(config, 'COBERTURA_DIAS_DISP', {'A': 30, 'M': 30, 'B': 30})
+        self.lead_time_dias_DISP = getattr(config, 'LEAD_TIME_DIAS_DISP', 30)
+        self.dias_seguridad_DISP = getattr(config, 'DIAS_SEGURIDAD_DISP', 15)
+        self.cobertura_dias_REMI = getattr(config, 'COBERTURA_DIAS_REMI', {'A': 30, 'M': 30, 'B': 30})
+        self.lead_time_dias_REMI = getattr(config, 'LEAD_TIME_DIAS_REMI', 30)
+        self.dias_seguridad_REMI = getattr(config, 'DIAS_SEGURIDAD_REMI', 15)
         self.umbral_A = getattr(config, 'UMBRAL_A', 80)
         self.umbral_M = getattr(config, 'UMBRAL_M', 95)
 
@@ -522,7 +525,7 @@ class ProyeccionProcessor:
         costo = ultimo.where(ultimo > 0, prom)
         return (cantidad * costo).round(2)
 
-    def pedido_por_canal(self, df, lead_time_dias, dias_seguridad):
+    def pedido_por_canal(self, df):
         """
         Calcula el pedido separando los DOS canales, porque tienen stock distinto:
 
@@ -535,21 +538,24 @@ class ProyeccionProcessor:
         Bodega principal surte a ambos canales (opcion 'cada canal por separado':
         se resta en los dos, sin repartir).
 
-        La demanda de cada canal es su demanda mensual ponderada 70/30
-        (Demanda_Disp_Mensual / Demanda_Rem_Mensual). Objetivo en dias:
-            Objetivo = (demanda_mensual / 30) * (Cobertura_Dias + lead_time + seguridad)
+        La cobertura, el lead time y el stock de seguridad son INDEPENDIENTES por
+        canal (parametros *_DISP y *_REMI en config.py). Objetivo en dias, por canal:
+            Objetivo = (demanda_canal / 30) * (cobertura_canal + lead_canal + seguridad_canal)
 
-        Requiere en df: Cobertura_Dias, Demanda_Disp_Mensual, Demanda_Rem_Mensual,
+        Requiere en df: Rotacion, Demanda_Disp_Mensual, Demanda_Rem_Mensual,
         Stock_Total, Stock_Bodega_Principal y las columnas de consumo por contrato.
 
-        Deja: Pedir_Dispensacion_Total, los Pedir_ de cada contrato de
-        dispensacion, Pedir_Remisiones y Cantidad_a_Pedir.
+        Deja: Necesidad_Disp / Necesidad_Rem / Necesidad_Mensual,
+        Pedir_Dispensacion_Total, los Pedir_ de cada contrato, Pedir_Remisiones y
+        Cantidad_a_Pedir_Rest_Inv.
         """
-        factor_dias = df['Cobertura_Dias'] + lead_time_dias + dias_seguridad
 
         # --- Canal DISPENSACION: contra todo el stock (bodega + puntos) ---
-        objetivo_disp = (df['Demanda_Disp_Mensual'] / 30.0) * factor_dias
+        cobertura_disp = df['Rotacion'].map(self.cobertura_dias_DISP).fillna(max(self.cobertura_dias_DISP.values()))
+        factor_disp = cobertura_disp + self.lead_time_dias_DISP + self.dias_seguridad_DISP
+        objetivo_disp = (df['Demanda_Disp_Mensual'] / 30.0) * factor_disp
         pedir_disp = np.ceil((objetivo_disp - df['Stock_Total']).clip(lower=0)).astype('int64')
+        df['Necesidad_Disp'] = objetivo_disp
         df['Pedir_Dispensacion_Total'] = pedir_disp
 
         # Repartir el pedido de dispensacion entre sus contratos, segun el consumo
@@ -561,37 +567,31 @@ class ProyeccionProcessor:
                 df[self.SEGMENTOS_CONTRATO[col]] = partes[col]
 
         # --- Canal REMISIONES: contra SOLO bodega principal ---
-        objetivo_rem = (df['Demanda_Rem_Mensual'] / 30.0) * factor_dias
-        pedir_rem = np.ceil((objetivo_rem - df['Stock_Bodega_Principal']).clip(lower=0)).astype('int64')
-        df['Pedir_Remisiones'] = pedir_rem
+        cobertura_remi = df['Rotacion'].map(self.cobertura_dias_REMI).fillna(max(self.cobertura_dias_REMI.values()))
+        factor_remi = cobertura_remi + self.lead_time_dias_REMI + self.dias_seguridad_REMI
+        objetivo_remi = (df['Demanda_Rem_Mensual'] / 30.0) * factor_remi
+        pedir_remi = np.ceil((objetivo_remi - df['Stock_Bodega_Principal']).clip(lower=0)).astype('int64')
+        df['Necesidad_Rem'] = objetivo_remi
+        df['Pedir_Remisiones'] = pedir_remi
 
+        df['Necesidad_Mensual'] = df['Necesidad_Disp'] + df['Necesidad_Rem']
         df['Cantidad_a_Pedir_Rest_Inv'] = df['Pedir_Dispensacion_Total'] + df['Pedir_Remisiones']
         return df
 
-    def calcular_pedido(self, lead_time_dias=None, dias_seguridad=None,
-                        cobertura_dias=None, umbral_A=None, umbral_M=None):
-        # Todos los parametros se diligencian en config.py; aqui solo se resuelven
-        # (lo que llegue por argumento tiene prioridad, para pruebas puntuales).
-        lead_time_dias = self.lead_time_dias if lead_time_dias is None else lead_time_dias
-        dias_seguridad = self.dias_seguridad if dias_seguridad is None else dias_seguridad
-        cobertura_dias = self.cobertura_dias if cobertura_dias is None else cobertura_dias
+    def calcular_pedido(self, umbral_A=None, umbral_M=None):
+        # Los umbrales se diligencian en config.py. La cobertura, el lead time y
+        # el stock de seguridad se resuelven POR CANAL dentro de pedido_por_canal.
         umbral_A = self.umbral_A if umbral_A is None else umbral_A
         umbral_M = self.umbral_M if umbral_M is None else umbral_M
 
-        cob_default = max(cobertura_dias.values())
-
-        # Todo el motor trabaja en DIAS. La demanda es la mensual ponderada 70/30;
-        # Demanda_Mensual (total) es la suma de la de los dos canales.
+        # Demanda total (informativa): suma de la de los dos canales.
         df = self.maestro_consumo
         df['Demanda_Mensual'] = df['Demanda_Disp_Mensual'] + df['Demanda_Rem_Mensual']
         df['Demanda_Diaria'] = df['Demanda_Mensual'] / 30.0
-        df['Cobertura_Dias'] = df['Rotacion'].map(cobertura_dias).fillna(cob_default)
-        df['Stock_Seguridad'] = df['Demanda_Diaria'] * dias_seguridad
-        df['Necesidad_Mensual'] = df['Demanda_Diaria'] * (df['Cobertura_Dias'] + lead_time_dias) + df['Stock_Seguridad']
 
         # Pedido separado por canal: dispensacion vs bodega+puntos, remisiones vs
-        # solo bodega principal.
-        self.pedido_por_canal(df, lead_time_dias, dias_seguridad)
+        # solo bodega principal. Deja Necesidad_Disp/Rem/Mensual y los Pedir_*.
+        self.pedido_por_canal(df)
 
         # Valorizado y estado de compra (sobre el pedido TOTAL, sin importar canal)
         df['Valorizado Ult Costo'] = self._valorizar(df['Cantidad_a_Pedir_Rest_Inv'],
@@ -628,12 +628,9 @@ class ProyeccionProcessor:
 
         mol['Demanda_Mensual'] = mol['Demanda_Disp_Mensual'] + mol['Demanda_Rem_Mensual']
         mol['Demanda_Diaria'] = mol['Demanda_Mensual'] / 30.0
-        mol['Cobertura_Dias'] = mol['Rotacion'].map(cobertura_dias).fillna(cob_default)
-        mol['Stock_Seguridad'] = mol['Demanda_Diaria'] * dias_seguridad
-        mol['Necesidad_Mensual'] = mol['Demanda_Diaria'] * (mol['Cobertura_Dias'] + lead_time_dias) + mol['Stock_Seguridad']
 
-        # Mismo criterio por canal que a nivel producto
-        self.pedido_por_canal(mol, lead_time_dias, dias_seguridad)
+        # Mismo criterio por canal que a nivel producto (deja Necesidad_* y Pedir_*)
+        self.pedido_por_canal(mol)
 
         self.pedido_molecula = mol
 

@@ -9,17 +9,13 @@ RUTA_STOCK_BODEGA = 'Datos/Valorizados/Valorizado_CEDI_27-07-2026.xls'
 RUTA_STOCK_PUNTOS = 'Datos/Valorizado_Puntos/Valorizado_Puntos_27-07-2026.xls'
 RUTA_MOLECULAS = 'Datos/Molecula_Compra/Molecula_Compra_27-07-2026.xlsx'
 
-COBERTURA_DIAS = {
-    'A': 30,
-    'M': 30,
-    'B': 30,
-}
+COBERTURA_DIAS_DISP = {'A': 30, 'M': 30, 'B': 30,}
+LEAD_TIME_DIAS_DISP = 15
+DIAS_SEGURIDAD_DISP = 20
 
-# --- Lead time: DIAS que tarda un pedido en llegar desde que se hace.
-LEAD_TIME_DIAS = 15
-
-# --- Stock de seguridad: DIAS extra de colchon por si la demanda sube.
-DIAS_SEGURIDAD = 20
+COBERTURA_DIAS_REMI = {'A': 30, 'M': 30, 'B': 30,}
+LEAD_TIME_DIAS_REMI = 15
+DIAS_SEGURIDAD_REMI = 20
 
 # --- Umbrales de la clasificacion de rotacion ABC (metodo de Pareto), en %.
 #         A = productos que acumulan hasta UMBRAL_A % del consumo total
