@@ -6,15 +6,9 @@ import config
 
 class ProyeccionProcessor:
 
-    # Codigos que no son productos reales y no deben entrar nunca a la proyeccion:
-    # cuentas contables (copago, glosas, arrendamiento, servicios) y placeholders.
-    # Los valores se diligencian en config.py (CODIGOS_EXCLUIDOS_*).
     PREFIJOS_EXCLUIDOS = getattr(config, 'CODIGOS_EXCLUIDOS_PREFIJOS', ('CONT',))
     CODIGOS_EXCLUIDOS = getattr(config, 'CODIGOS_EXCLUIDOS_EXACTOS', ('M99999',))
 
-    # Contratos sobre los que se desglosa el pedido.
-    # Mapea: columna de consumo historico -> columna de pedido resultante.
-    # El orden define el orden de las columnas en la salida.
     SEGMENTOS_CONTRATO = {
         'Consumo_NEPS_Capita':  'Pedir_NEPS_Capita',
         'Consumo_NEPS_Evento':  'Pedir_NEPS_Evento',
@@ -22,18 +16,12 @@ class ProyeccionProcessor:
         'Consumo_Remisiones':   'Pedir_Remisiones',
     }
 
-    # Columnas informativas del maestro. Ya llegan solas por el merge de
-    # construir_base (que trae el maestro completo); se listan aqui unicamente
-    # para mostrarlas y exportarlas. 'Grupo' es el laboratorio.
     COLS_MAESTRO_INFO = ('Grupo', 'Proveedor', 'Ultimo Costo', 'Costo Promedio')
 
     MESES_ES = {'01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr',
                 '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Ago',
                 '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dic'}
 
-    # Columnas de consumo que vienen del archivo de DISPENSACION.
-    # Consumo_Remisiones viene de otro archivo y es otro negocio: por eso la
-    # rotacion se calcula por separado para cada canal.
     COLS_CONSUMO_DISPENSACION = (
         'Consumo_NEPS_Capita',
         'Consumo_NEPS_Evento',
@@ -52,8 +40,6 @@ class ProyeccionProcessor:
         self.consumo_consolidado = None
         self.maestro_consumo = None
 
-        # Parametros del motor: se diligencian en config.py. Un valor pasado al
-        # constructor tiene prioridad (para pruebas puntuales).
         self.criterio_rotacion = criterio_rotacion or getattr(config, 'CRITERIO_ROTACION', 'volumen')
         self.cobertura_dias_DISP = getattr(config, 'COBERTURA_DIAS_DISP', {'A': 30, 'M': 30, 'B': 30})
         self.lead_time_dias_DISP = getattr(config, 'LEAD_TIME_DIAS_DISP', 30)
@@ -287,17 +273,6 @@ class ProyeccionProcessor:
 
     def calcular_consumo_mensual(self):
         """
-        Consumo de cada producto mes a mes, en columnas separadas.
-
-        Suma dispensacion + remisiones, para que el total mensual cuadre contra
-        'Consumo_Acum'.
-
-        OJO con dos trampas de los archivos de origen:
-        1. Escriben el periodo distinto: dispensacion '2026_01', remisiones
-           '2026-01'. Sin normalizar, el pivot crea columnas duplicadas.
-        2. No cubren los mismos meses. Remisiones puede traer meses que
-           dispensacion no tiene; esos meses quedan con solo un canal.
-
         Genera tres bloques de columnas (y guarda sus nombres):
           - self.cols_consumo_mensual_disp : dispensacion mes a mes (Consumo_Disp_*)
           - self.cols_consumo_mensual_rem  : remisiones mes a mes   (Consumo_Rem_*)
@@ -403,17 +378,7 @@ class ProyeccionProcessor:
 
     # ==================================================================
     # Clasificacion de rotacion A / M / B por Pareto ABC.
-    #
-    # criterio='volumen' (VIGENTE): Pareto sobre 'Consumo_Acum', las unidades
-    #   realmente consumidas en el historico.
-    #
-    # criterio='formulas' (LEGACY, no usar): Pareto sobre el conteo ponderado
-    #   70/30 de renglones de dispensacion. El archivo de dispensacion viene
-    #   pre-agregado por (PERIODO, CODIGO, CLIENTE, TIPO_SERVICIO), asi que ese
-    #   conteo NO mide despachos: mide en cuantos segmentos aparece el producto
-    #   y satura en ~6. Resultado: metia el 94.8% del consumo en la letra 'A',
-    #   es decir no discriminaba nada. Se conserva unicamente para poder
-    #   reproducir la comparacion historica (ver comparar_v1_v2.py).
+
     # ==================================================================
     def calcular_rotacion(self, umbral_A=None, umbral_M=None):
         umbral_A = self.umbral_A if umbral_A is None else umbral_A
@@ -467,17 +432,7 @@ class ProyeccionProcessor:
             letra = self._pareto_abc(df[col_consumo], umbral_A, umbral_M)
             df[col_rotacion] = letra.where(df[col_consumo] > 0, '-')
 
-    # ==================================================================
-    # DESGLOSE DEL PEDIDO POR CONTRATO
-    #
-    # El inventario es UNO SOLO: no hay stock separado por contrato. Por eso
-    # el pedido no se puede calcular de forma independiente por contrato, se
-    # calcula completo y luego se REPARTE segun el peso historico de cada
-    # contrato en el consumo del producto.
-    #
-    # (Da igual repartir el pedido que calcular cada contrato por separado
-    # prorrateando tambien el stock: todas las formulas son lineales en el
-    # consumo, asi que ambos caminos dan el mismo numero.)
+
     # ==================================================================
     @staticmethod
     def _prorratear_entero(total, pesos):
@@ -485,10 +440,6 @@ class ProyeccionProcessor:
         Reparte el entero `total` de cada fila entre varias columnas, en
         proporcion a `pesos`, garantizando que las partes sumen EXACTAMENTE
         el total (metodo de mayores residuos).
-
-        total : Series de enteros     (n,)
-        pesos : DataFrame de consumos (n, k)
-        return: DataFrame de enteros  (n, k)
         """
         suma = pesos.sum(axis=1)
         sin_consumo = suma <= 0
@@ -572,10 +523,22 @@ class ProyeccionProcessor:
         objetivo_remi = (df['Demanda_Rem_Mensual'] / 30.0) * factor_remi
         pedir_remi = np.ceil((objetivo_remi - df['Stock_Bodega_Principal']).clip(lower=0)).astype('int64')
         df['Necesidad_Rem'] = objetivo_remi
-        df['Pedir_Remisiones'] = pedir_remi
 
         df['Necesidad_Mensual'] = df['Necesidad_Disp'] + df['Necesidad_Rem']
-        df['Cantidad_a_Pedir_Rest_Inv'] = df['Pedir_Dispensacion_Total'] + df['Pedir_Remisiones']
+        df['Cantidad_a_Pedir_Rest_Inv'] = df['Pedir_Dispensacion_Total'] + pedir_remi
+        puntos = df['Stock_Total'] - df['Stock_Bodega_Principal']
+
+        #Columna 1: Disp primero -> Comercial toma el restante (MODELO VIGENTE)
+        bodega_sobrante_1 = np.minimum(df['Stock_Bodega_Principal'], df['Stock_Total'] - objetivo_disp).clip(lower=0)
+        df['Bodega_Disponible_Comercial'] = bodega_sobrante_1
+        pedir_com = np.ceil((objetivo_remi - bodega_sobrante_1).clip(lower=0)).astype('int64')
+        df['Pedir_Remisiones'] = pedir_com
+        df['Cantidad a Pedir'] = (pedir_disp + pedir_com).astype('int64')
+
+        #Columna 2: Remi primero -> Dispensacion toma el restante
+        bodega_sobrante_2 = (df['Stock_Bodega_Principal'] - objetivo_remi).clip(lower=0)
+        pedir_disp_2 = np.ceil((objetivo_disp -(puntos + bodega_sobrante_2)).clip(lower=0))
+        df['Cantidad_a_Pedir_RemPrimero'] = (pedir_disp_2 + pedir_remi).astype('int64')
         return df
 
     def calcular_pedido(self, umbral_A=None, umbral_M=None):
@@ -594,15 +557,15 @@ class ProyeccionProcessor:
         self.pedido_por_canal(df)
 
         # Valorizado y estado de compra (sobre el pedido TOTAL, sin importar canal)
-        df['Valorizado Ult Costo'] = self._valorizar(df['Cantidad_a_Pedir_Rest_Inv'],
+        df['Valorizado Ult Costo'] = self._valorizar(df['Cantidad a Pedir'],
                                            df.get('Ultimo Costo'), df.get('Ultimo Costo'))
-        df['Valorizado Promedio'] = self._valorizar(df['Cantidad_a_Pedir_Rest_Inv'],
+        df['Valorizado Promedio'] = self._valorizar(df['Cantidad a Pedir'],
                                              df.get('Costo Promedio'), df.get('Costo Promedio'))
         df['Valorizado Ult Costo Sin Rest Inv'] = self._valorizar(df['Necesidad_Mensual'],
                                                        df.get('Ultimo Costo'), df.get('Ultimo Costo'))
         df['Valorizado Promedio Sin Rest Inv'] = self._valorizar(df['Necesidad_Mensual'],
                                                        df.get('Costo Promedio'), df.get('Costo Promedio'))
-        df['Estado'] = np.where(df['Cantidad_a_Pedir_Rest_Inv'] > 0, 'COMPRAR', 'NO COMPRAR')
+        df['Estado'] = np.where(df['Cantidad a Pedir'] > 0, 'COMPRAR', 'NO COMPRAR')
 
         agregados = {
             'Consumo_Molecula': ('Consumo_Acum', 'sum'),
@@ -650,277 +613,6 @@ class ProyeccionProcessor:
         self.calcular_rotacion_por_canal()
         self.calcular_pedido()
 
-    def imprimir_resumen_pedido(self):
-        """Resumen del motor de pedido a nivel producto y molecula."""
-        print("\n" + "=" * 70)
-        print("                 MOTOR DE PEDIDO / PROYECCION                 ")
-        print("=" * 70)
-
-        prod = self.maestro_consumo
-        a_pedir_prod = prod[prod['Cantidad_a_Pedir_Rest_Inv'] > 0]
-        print(f"Productos que requieren pedido: {len(a_pedir_prod):,} de {len(prod):,}")
-        print(f"Unidades totales a pedir (producto): {prod['Cantidad_a_Pedir_Rest_Inv'].sum():,.0f}")
-
-        cols = ['Codigo', 'Nombre', 'Rotacion', 'Demanda_Mensual', 'Cobertura_Dias',
-                'Stock_Total', 'Necesidad_Mensual', 'Cantidad_a_Pedir_Rest_Inv']
-        cols = [c for c in cols if c in prod.columns]
-        print("\nTOP 10 pedidos por producto:")
-        print(prod.sort_values('Cantidad_a_Pedir_Rest_Inv', ascending=False)[cols].head(10).to_string(index=False))
-
-        if hasattr(self, 'pedido_molecula'):
-            mol = self.pedido_molecula
-            print("\n" + "-" * 70)
-            print(f"Moleculas que requieren pedido: {len(mol[mol['Cantidad_a_Pedir_Rest_Inv'] > 0]):,} de {len(mol):,}")
-            cols_m = ['Codigo_Molecula', 'Molecula', 'N_Productos', 'Rotacion',
-                      'Stock_Total', 'Necesidad_Mensual', 'Cantidad_a_Pedir_Rest_Inv']
-            cols_m = [c for c in cols_m if c in mol.columns]
-            print("\nTOP 10 pedidos por molecula:")
-            print(mol.sort_values('Cantidad_a_Pedir_Rest_Inv', ascending=False)[cols_m].head(10).to_string(index=False))
-        print("=" * 70 + "\n")
-
-    def imprimir_resumen_consolidado(self):
-        print("------ CONSUMO CONSOLIDADO -------")
-        print(self.consumo_consolidado.head())
-        print("\nTotal productos únicos con consumo:", len(self.consumo_consolidado))
-
-    def imprimir_resumen_base(self):
-        print("\n--- Base (Maestro + Consumo) Creada ---")
-        print(f"\nTotal de registros en la Base maestro: {len(self.maestro_consumo)}")
-        print(f"\nProductos con demanda > 0: {len(self.maestro_consumo[self.maestro_consumo['Consumo_Acum'] > 0])}")
-
-        columnas_vistas = ['Codigo',
-                      'Nombre',
-                      'Codigo_Molecula',
-                      'Molecula',
-                      'Consumo_Molecula',
-                      'Consumo_NEPS_Capita',
-                      'Consumo_NEPS_Evento',
-                      'Consumo_FOMAG_Evento',
-                      'Consumo_Remisiones',
-                      'Consumo_Acum',
-                      'Formulas_Ponderadas',
-                      *self.COLS_MAESTRO_INFO,
-                      'Rotacion',
-                      'Rotacion_Dispensacion',
-                      'Rotacion_Remisiones',
-                      'Stock_Bodega_Principal',
-                      'Stock_Puntos_Dispensacion',
-                      'Stock_Total',
-                      'Cantidad_a_Pedir_Rest_Inv',
-                      'Necesidad_Mensual',
-                      *self.SEGMENTOS_CONTRATO.values()]
-        cols_existentes = [col for col in columnas_vistas if col in self.maestro_consumo.columns]
-        print(self.maestro_consumo[cols_existentes].head())
-
-    def imprimir_resumen_molecula(self):
-        print("\n" + "=" * 70)
-        print("      VISTA COMPARATIVA: CONSUMO INDIVIDUAL VS CONSUMO MOLÉCULA")
-        print("=" * 70)
-
-        cols_vista = ['Codigo',
-                      'Nombre',
-                      'Codigo_Molecula',
-                      'Molecula',
-                      'Consumo_Molecula',
-                      'Consumo_NEPS_Capita',
-                      'Consumo_NEPS_Evento',
-                      'Consumo_FOMAG_Evento',
-                      'Consumo_Remisiones',
-                      'Consumo_Acum',
-                      'Formulas_Ponderadas',
-                      *self.COLS_MAESTRO_INFO,
-                      'Rotacion',
-                      'Rotacion_Dispensacion',
-                      'Rotacion_Remisiones',
-                      'Stock_Bodega_Principal',
-                      'Stock_Puntos_Dispensacion',
-                      'Stock_Total',
-                      'Cantidad_a_Pedir_Rest_Inv',
-                      'Necesidad_Mensual',
-                      *self.SEGMENTOS_CONTRATO.values()]
-
-        cols_existentes = [c for c in cols_vista if c in self.maestro_consumo.columns]
-
-        print(self.maestro_consumo[cols_existentes].head(20).to_string(index=False))
-        print("=" * 70 + "\n")
-
-    def imprimir_resumen_rotacion(self):
-        """Resumen de la clasificacion de rotacion A/M/B."""
-        print("\n" + "=" * 78)
-        print(f"     CLASIFICACION DE ROTACION (A / M / B) - criterio: {self.criterio_rotacion}")
-        print("=" * 78)
-        if 'Rotacion' not in self.maestro_consumo.columns:
-            print("[!] No se ha calculado la rotacion.")
-            return
-
-        df = self.maestro_consumo
-        col_base = 'Formulas_Ponderadas' if self.criterio_rotacion == 'formulas' else 'Consumo_Acum'
-        conteo = df['Rotacion'].value_counts()
-        total_consumo = df['Consumo_Acum'].sum()
-
-        for cat in ['A', 'M', 'B']:
-            n = int(conteo.get(cat, 0))
-            consumo_cat = df.loc[df['Rotacion'] == cat, 'Consumo_Acum'].sum()
-            pct_prod = n / len(df) * 100 if len(df) else 0
-            pct_cons = consumo_cat / total_consumo * 100 if total_consumo else 0
-            print(f"  {cat}: {n:>5,} productos ({pct_prod:>5.1f}% del catalogo) "
-                  f"-> {consumo_cat:>14,.0f} unids ({pct_cons:>5.1f}% del consumo)")
-
-        print("-" * 78)
-        print(f"TOP 10 por {col_base}:")
-        cols = [c for c in ['Codigo', 'Nombre', col_base, 'Rotacion',
-                            'Cobertura_Dias', 'Stock_Total', 'Cantidad_a_Pedir_Rest_Inv']
-                if c in df.columns]
-        top = df.sort_values(col_base, ascending=False)[cols].head(10).copy()
-        if 'Nombre' in top.columns:
-            top['Nombre'] = top['Nombre'].astype(str).str.slice(0, 42)
-        print(top.to_string(index=False))
-        print("=" * 78 + "\n")
-
-    def imprimir_resumen_mensual(self):
-        """Consumo mes a mes, con cuadre contra Consumo_Acum y aviso de meses incompletos."""
-        print("\n" + "=" * 96)
-        print("        CONSUMO MENSUAL POR PRODUCTO")
-        print("=" * 96)
-
-        cols = getattr(self, 'cols_consumo_mensual', [])
-        if not cols:
-            print("[!] No se calculo el consumo mensual.")
-            return
-
-        df = self.maestro_consumo
-
-        # Que canal aporto cada mes: si falta uno, el mes esta incompleto
-        def _periodos(origen, col):
-            if 'PERIODO' not in origen.columns:
-                return set()
-            return set(origen['PERIODO'].astype(str).str.strip().str.replace('-', '_', regex=False))
-
-        p_disp = _periodos(self.consumo_dispensacion, 'Consumo_Dispensacion')
-        p_rem = _periodos(self.consumo_remisiones, 'Consumo_Remisiones')
-
-        print(f"  {'Mes':<18}{'Consumo':>16}{'Productos':>12}   Canales con datos")
-        print("  " + "-" * 92)
-        for periodo, col in zip(self.periodos_mensuales, cols):
-            total = df[col].sum()
-            n = int((df[col] > 0).sum())
-            canales = []
-            if periodo in p_disp:
-                canales.append('dispensacion')
-            if periodo in p_rem:
-                canales.append('remisiones')
-            aviso = '' if len(canales) == 2 else '   <-- INCOMPLETO'
-            print(f"  {col.replace('Consumo_', ''):<18}{total:>16,.0f}{n:>12,}   "
-                  f"{' + '.join(canales)}{aviso}")
-
-        suma_mensual = df[cols].sum().sum()
-        acum = df['Consumo_Acum'].sum()
-        print("  " + "-" * 92)
-        print(f"  {'TOTAL':<18}{suma_mensual:>16,.0f}")
-        if abs(suma_mensual - acum) < 1:
-            print(f"\n  [OK] Cuadre: la suma de los meses coincide con Consumo_Acum ({acum:,.0f}).")
-        else:
-            print(f"\n  [X] Descuadre: meses {suma_mensual:,.0f} vs Consumo_Acum {acum:,.0f} "
-                  f"(dif {suma_mensual - acum:+,.0f}).")
-
-        print("-" * 96)
-        print("  TOP 10 productos por consumo total, mes a mes:")
-        vista = [c for c in ['Codigo', 'Nombre'] if c in df.columns] + cols
-        top = df.sort_values('Consumo_Acum', ascending=False)[vista].head(10).copy()
-        if 'Nombre' in top.columns:
-            top['Nombre'] = top['Nombre'].astype(str).str.slice(0, 30)
-        print(top.to_string(index=False, float_format=lambda x: f'{x:,.0f}'))
-        print("=" * 96 + "\n")
-
-    def imprimir_resumen_stock(self):
-        """Stock separado: bodega principal (CEDI) vs total en puntos de dispensacion."""
-        print("\n" + "=" * 86)
-        print("        STOCK: BODEGA PRINCIPAL vs PUNTOS DE DISPENSACION")
-        print("=" * 86)
-
-        df = self.maestro_consumo
-        bod = df['Stock_Bodega_Principal'].sum()
-        pts = df['Stock_Puntos_Dispensacion'].sum()
-        tot = bod + pts
-        n_puntos = self.stock_puntos['Bodega'].nunique() if 'Bodega' in self.stock_puntos.columns else None
-
-        print(f"  Bodega Principal (CEDI) : {bod:>14,.0f} unids ({bod / tot * 100 if tot else 0:>5.1f}%)  "
-              f"| {int((df['Stock_Bodega_Principal'] > 0).sum()):>5,} codigos con existencia")
-        print(f"  Puntos de Dispensacion  : {pts:>14,.0f} unids ({pts / tot * 100 if tot else 0:>5.1f}%)  "
-              f"| {int((df['Stock_Puntos_Dispensacion'] > 0).sum()):>5,} codigos con existencia"
-              + (f"  ({n_puntos} puntos)" if n_puntos else ""))
-        print(f"  {'TOTAL':<23} : {tot:>14,.0f} unids")
-
-        print("-" * 86)
-        print("  Codigos SIN stock en bodega principal pero CON stock en puntos: "
-              f"{int(((df['Stock_Bodega_Principal'] <= 0) & (df['Stock_Puntos_Dispensacion'] > 0)).sum()):,}")
-        print("  Codigos CON stock en bodega principal pero SIN stock en puntos: "
-              f"{int(((df['Stock_Bodega_Principal'] > 0) & (df['Stock_Puntos_Dispensacion'] <= 0)).sum()):,}")
-
-        print("-" * 86)
-        print("  TOP 10 por stock total:")
-        cols = [c for c in ['Codigo', 'Nombre', 'Stock_Bodega_Principal',
-                            'Stock_Puntos_Dispensacion', 'Stock_Total',
-                            'Consumo_Acum', 'Cantidad_a_Pedir_Rest_Inv'] if c in df.columns]
-        top = df.sort_values('Stock_Total', ascending=False)[cols].head(10).copy()
-        top['Nombre'] = top['Nombre'].astype(str).str.slice(0, 38)
-        print(top.to_string(index=False, float_format=lambda x: f'{x:,.0f}'))
-        print("=" * 86 + "\n")
-
-    def imprimir_resumen_rotacion_canal(self):
-        """Rotacion de dispensacion vs remisiones, y cuanto se contradicen."""
-        print("\n" + "=" * 86)
-        print("        ROTACION POR CANAL: DISPENSACION vs REMISIONES")
-        print("=" * 86)
-
-        df = self.maestro_consumo
-        if 'Rotacion_Dispensacion' not in df.columns or 'Rotacion_Remisiones' not in df.columns:
-            print("[!] No se calculo la rotacion por canal.")
-            return
-
-        orden = ['A', 'M', 'B', '-']
-        for canal, col_rot, col_cons in [
-            ('DISPENSACION', 'Rotacion_Dispensacion', 'Consumo_Dispensacion_Total'),
-            ('REMISIONES', 'Rotacion_Remisiones', 'Consumo_Remisiones'),
-        ]:
-            total = df[col_cons].sum()
-            print(f"\n  {canal}  (consumo 6 meses: {total:,.0f} unidades)")
-            for cat in orden:
-                n = int((df[col_rot] == cat).sum())
-                if not n:
-                    continue
-                cons = df.loc[df[col_rot] == cat, col_cons].sum()
-                etq = 'sin movimiento' if cat == '-' else f'rotacion {cat}'
-                print(f"    {etq:<16} {n:>5,} productos  ->  {cons:>14,.0f} unids "
-                      f"({cons / total * 100 if total else 0:>5.1f}%)")
-
-        print("\n" + "-" * 86)
-        print("  CRUCE  (filas = dispensacion, columnas = remisiones)")
-        cruce = pd.crosstab(df['Rotacion_Dispensacion'], df['Rotacion_Remisiones'])
-        cruce = cruce.reindex(index=orden, columns=orden).fillna(0).astype(int)
-        print(cruce.to_string())
-
-        # Lo que motivo el requerimiento: productos que no coinciden entre canales
-        ambos = df[(df['Rotacion_Dispensacion'] != '-') & (df['Rotacion_Remisiones'] != '-')]
-        discrepan = ambos[ambos['Rotacion_Dispensacion'] != ambos['Rotacion_Remisiones']]
-        print("-" * 86)
-        print(f"  Productos que se mueven en AMBOS canales: {len(ambos):,}")
-        print(f"  De esos, clasifican DISTINTO segun el canal: {len(discrepan):,} "
-              f"({len(discrepan) / len(ambos) * 100 if len(ambos) else 0:.1f}%)")
-
-        extremos = ambos[
-            ((ambos['Rotacion_Dispensacion'] == 'A') & (ambos['Rotacion_Remisiones'] == 'B')) |
-            ((ambos['Rotacion_Dispensacion'] == 'B') & (ambos['Rotacion_Remisiones'] == 'A'))
-        ]
-        if len(extremos):
-            print(f"\n  Casos extremos (A en un canal, B en el otro): {len(extremos):,}")
-            cols = [c for c in ['Codigo', 'Nombre', 'Consumo_Dispensacion_Total', 'Rotacion_Dispensacion',
-                                'Consumo_Remisiones', 'Rotacion_Remisiones', 'Rotacion']
-                    if c in df.columns]
-            top = extremos.sort_values('Consumo_Dispensacion_Total', ascending=False)[cols].head(10).copy()
-            top['Nombre'] = top['Nombre'].astype(str).str.slice(0, 34)
-            print(top.to_string(index=False))
-        print("=" * 86 + "\n")
 
     def imprimir_resumen_contratos(self):
         """Pedido desglosado por contrato, con verificacion de que las partes cuadren."""
@@ -934,7 +626,7 @@ class ProyeccionProcessor:
             print("[!] No se calculo el desglose por contrato.")
             return
 
-        total_ped = df['Cantidad_a_Pedir_Rest_Inv'].sum()
+        total_ped = df['Cantidad a Pedir'].sum()
         total_cons = df['Consumo_Acum'].sum()
 
         filas = []
@@ -955,7 +647,7 @@ class ProyeccionProcessor:
         res.loc['TOTAL'] = {
             'Contrato': 'TOTAL', 'Consumo_6m': res['Consumo_6m'].sum(), '%_Cons': res['%_Cons'].sum(),
             'A_Pedir': res['A_Pedir'].sum(), '%_Pedido': res['%_Pedido'].sum(),
-            'Productos': int((df['Cantidad_a_Pedir_Rest_Inv'] > 0).sum()),
+            'Productos': int((df['Cantidad a Pedir'] > 0).sum()),
         }
         print(res.to_string(index=False, formatters={
             'Consumo_6m': lambda x: f'{x:,.0f}',
@@ -966,11 +658,11 @@ class ProyeccionProcessor:
         }))
 
         # Verificacion: las partes deben sumar exactamente el total
-        descuadre = int((df[cols_pedir].sum(axis=1) != df['Cantidad_a_Pedir_Rest_Inv']).sum())
+        descuadre = int((df[cols_pedir].sum(axis=1) != df['Cantidad a Pedir']).sum())
         print("-" * 88)
         if descuadre == 0:
             print(f"[OK] Cuadre del desglose: los {len(cols_pedir)} contratos suman exactamente "
-                  f"Cantidad_a_Pedir en los {len(df):,} productos.")
+                  f"'Cantidad a Pedir' en los {len(df):,} productos.")
         else:
             print(f"[X] {descuadre:,} productos donde el desglose NO suma Cantidad_a_Pedir.")
         print("=" * 88 + "\n")

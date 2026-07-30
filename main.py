@@ -38,6 +38,7 @@ DESCRIPCIONES_COLUMNAS = {
     'Stock_Bodega_Principal': 'Valorizado CEDI - unidades en bodega principal',
     'Stock_Puntos_Dispensacion': 'Valorizado Puntos - suma de unidades de los puntos de dispensacion',
     'Stock_Total': 'Calculado - Stock_Bodega_Principal + Stock_Puntos_Dispensacion',
+    'Bodega_Disponible_Comercial': 'Calculado - bodega (CEDI) que le queda a comercial tras dispensacion. El pedido comercial se resta contra esto: Necesidad_Rem - esto = Pedir_Remisiones',
     # --- motor de pedido ---
     'Demanda_Mensual': 'Calculado - demanda mensual ponderada 70/30 (ult. 3 meses 70%, primeros 3 meses 30%)',
     'Demanda_Disp_Mensual': 'Calculado - demanda mensual 70/30 solo del canal dispensacion',
@@ -48,12 +49,12 @@ DESCRIPCIONES_COLUMNAS = {
     'Necesidad_Disp': 'Calculado - unidades objetivo del canal dispensacion (demanda_disp/30 x factor_disp, dias de config *_DISP)',
     'Necesidad_Rem': 'Calculado - unidades objetivo del canal remisiones (demanda_rem/30 x factor_remi, dias de config *_REMI)',
     'Necesidad_Mensual': 'Calculado - Necesidad_Disp + Necesidad_Rem (necesidad total del producto)',
-    'Cantidad_a_Pedir_Rest_Inv': 'Calculado - Pedir_Dispensacion_Total + Pedir_Remisiones (cada canal con su stock)',
+    'Cantidad a Pedir': 'Calculado - pedido total (modelo vigente) = Pedir_Dispensacion_Total + Pedir_Remisiones. La bodega la agota Dispensacion y Comercial toma el sobrante (sin doble resta)',
     'Pedir_Dispensacion_Total': 'Calculado - pedido del canal dispensacion vs stock total (bodega + puntos)',
     'Pedir_NEPS_Capita': 'Calculado - parte del pedido de dispensacion segun peso historico de Capita',
     'Pedir_NEPS_Evento': 'Calculado - parte del pedido de dispensacion segun peso historico de Evento',
     'Pedir_FOMAG_Evento': 'Calculado - parte del pedido de dispensacion segun peso historico de FOMAG',
-    'Pedir_Remisiones': 'Calculado - pedido del canal remisiones vs SOLO bodega principal (sin puntos)',
+    'Pedir_Remisiones': 'Calculado - pedido del canal comercial/remisiones (modelo vigente): objetivo de remisiones menos la bodega que le queda tras dispensacion. Es la parte comercial de Cantidad a Pedir (sin doble resta)',
     'Valorizado': 'Calculado - cantidad a pedir de ESTA hoja * Ultimo Costo (si es 0, usa Costo Promedio)',
     'Estado': 'Calculado - COMPRAR si hay cantidad a pedir en ESTA hoja, si no NO COMPRAR',
 }
@@ -94,11 +95,7 @@ def cargar_datos():
 
 
 def _valorizar_estado(sub, col_cantidad):
-    """
-    Sobrescribe 'Valorizado' y 'Estado' en `sub` usando el pedido de `col_cantidad`
-    (asi cada hoja de canal valoriza SOLO su propio pedido). Reutiliza la misma
-    logica de costo del processor (ultimo costo; si es 0, costo promedio).
-    """
+
     sub['Valorizado'] = ProyeccionProcessor._valorizar(
         sub[col_cantidad], sub.get('Ultimo Costo'), sub.get('Costo Promedio'))
     sub['Estado'] = sub[col_cantidad].gt(0).map({True: 'COMPRAR', False: 'NO COMPRAR'})
@@ -106,14 +103,7 @@ def _valorizar_estado(sub, col_cantidad):
 
 
 def construir_hojas(processor):
-    """
-    Arma las hojas del Excel.
 
-    - Dispensacion: consumo y pedido del canal de dispensacion (Capita + Evento
-      + FOMAG), solo productos con movimiento o pedido en ese canal.
-    - Remisiones:   lo mismo para el canal de remisiones.
-    - Todo:         la base completa, incluyendo el consumo mes a mes.
-    """
     df = processor.maestro_consumo
     mensuales = list(getattr(processor, 'cols_consumo_mensual', []))
     mensuales_disp = list(getattr(processor, 'cols_consumo_mensual_disp', []))
@@ -143,7 +133,7 @@ def construir_hojas(processor):
     # muestra ni interviene en el pedido). Solo bodega principal.
     colsRem = ['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula','Nombre Comercial', 'Grupo', 'Proveedor',
                'Costo Promedio', 'Ultimo Costo', *mensuales_rem, 'Consumo_Remisiones','Demanda_Rem_Mensual',
-               'Rotacion_Remisiones','Stock_Bodega_Principal', 'Sotck_Bodega_Dispensacion', 'Stock_Total','Necesidad_Rem','Pedir_Remisiones',
+               'Rotacion_Remisiones','Stock_Bodega_Principal', 'Bodega_Disponible_Comercial', 'Necesidad_Rem','Pedir_Remisiones',
                'Estado', 'Valorizado Ult Costo', 'Valorizado Promedio']
     mask = (df.get('Consumo_Remisiones', 0) > 0) | (df.get('Pedir_Remisiones', 0) > 0)
     rem = (df.loc[mask, [c for c in colsRem if c in df.columns]]
@@ -155,31 +145,31 @@ def construir_hojas(processor):
     colsTodo = ['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula','Nombre Comercial', 'Grupo', 'Proveedor',
                 'Costo Promedio', 'Ultimo Costo', 'Consumo_Molecula', 'Consumo_NEPS_Capita',
                 'Consumo_NEPS_Evento', 'Consumo_FOMAG_Evento', 'Consumo_Dispensacion_Total',
-                'Consumo_Remisiones', 'Consumo_Sin_Clasificar', *mensuales, 'Consumo_Acum',
+                'Consumo_Remisiones', *mensuales, 'Consumo_Acum',
                 'Rotacion', 'Rotacion_Dispensacion', 'Rotacion_Remisiones','Demanda_Disp_Mensual',
                 'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria',
                 'Necesidad_Disp','Necesidad_Rem','Necesidad_Mensual','Valorizado Promedio Sin Rest Inv','Valorizado Ult Costo Sin Rest Inv', 'Stock_Bodega_Principal',
-                'Stock_Puntos_Dispensacion','Stock_Total','Cantidad_a_Pedir_Rest_Inv',
+                'Stock_Puntos_Dispensacion','Stock_Total','Cantidad a Pedir','Estado',
                 'Valorizado Promedio','Valorizado Ult Costo','Pedir_NEPS_Capita', 'Pedir_NEPS_Evento','Pedir_FOMAG_Evento',
-                'Pedir_Dispensacion_Total','Pedir_Remisiones','Estado']
+                'Pedir_Dispensacion_Total','Pedir_Remisiones']
     hojas['Todo'] = (df[[c for c in colsTodo if c in df.columns]]
-                     .sort_values('Cantidad_a_Pedir_Rest_Inv', ascending=False))
+                     .sort_values('Cantidad a Pedir', ascending=False))
 
     # -------------------------------------------------------------- MOLECULA
     cols = ['Codigo_Molecula', 'Molecula','Nombre Comercial', 'N_Productos', 'Rotacion',
             'Consumo_Molecula', 'Stock_Total', 'Demanda_Mensual', 'Demanda_Diaria', 'Cobertura_Dias',
             'Stock_Seguridad', 'Necesidad_Mensual',
-            'Cantidad_a_Pedir_Rest_Inv', 'Pedir_Dispensacion_Total', *pedir_contratos]
+            'Cantidad a Pedir', 'Pedir_Dispensacion_Total', *pedir_contratos]
     mol = processor.pedido_molecula
     hojas['Pedido_Molecula'] = (mol[[c for c in cols if c in mol.columns]]
-                                .sort_values('Cantidad_a_Pedir_Rest_Inv', ascending=False))
+                                .sort_values('Cantidad a Pedir', ascending=False))
 
     return hojas
 
 
 def exportar_excel(processor, ruta=None):
     if ruta is None:
-        ruta = f'Resultados_Proyeccion_{date.today():%Y-%m-%d}.xlsx'
+        ruta = f'Excel Proyeccion/Resultados_Proyeccion_{date.today():%Y-%m-%d}.xlsx'
 
     hojas = construir_hojas(processor)
 
@@ -187,6 +177,9 @@ def exportar_excel(processor, ruta=None):
     fuente_titulo = Font(bold=True)
     relleno_desc = PatternFill('solid', fgColor='FFF3E0')
     alineacion_desc = Alignment(wrap_text=True, vertical='top')
+    grupo_1_color = PatternFill('solid', fgColor='D9EAD3')
+    celdas_grupo_1 = ['AL2', 'AN2', 'AO2']
+    grupo_2_color = PatternFill('solid', fgColor='CCF2FF')
 
     def _escribir(destino):
         with pd.ExcelWriter(destino, engine='openpyxl') as writer:
@@ -208,6 +201,13 @@ def exportar_excel(processor, ruta=None):
                 ws.row_dimensions[1].height = 60
                 if ws.max_row > 2:
                     ws.auto_filter.ref = f'A2:{ws.cell(2, ws.max_column).coordinate}'
+                if nombre == 'Todo':
+                    for celda in celdas_grupo_1:
+                        ws[celda].fill = grupo_1_color
+                if nombre == 'Todo':
+                    for fila2 in ws['AF2:AH2']:
+                        for celda in fila2:
+                            celda.fill = grupo_2_color
 
                 # Ancho por columna, ignorando la fila de procedencia (es larga y
                 # va con ajuste de texto); se mide sobre titulo + una muestra de datos.
@@ -239,15 +239,8 @@ def main():
     processor = ProyeccionProcessor(maestro, consumo_dispensacion, consumo_remisiones, stock_bodega, stock_puntos, molecula_compra)
     processor.procesar()
 
-    processor.imprimir_resumen_consolidado()
-    processor.imprimir_resumen_base()
     processor.auditoria_integridad()
-    processor.imprimir_resumen_rotacion()
-    processor.imprimir_resumen_rotacion_canal()
-    processor.imprimir_resumen_mensual()
-    processor.imprimir_resumen_stock()
     processor.imprimir_resumen_contratos()
-    processor.imprimir_resumen_molecula()
     exportar_excel(processor)
 
 
