@@ -57,6 +57,9 @@ DESCRIPCIONES_COLUMNAS = {
     'Pedir_Remisiones': 'Calculado - pedido del canal comercial/remisiones (modelo vigente): objetivo de remisiones menos la bodega que le queda tras dispensacion. Es la parte comercial de Cantidad a Pedir (sin doble resta)',
     'Valorizado': 'Calculado - cantidad a pedir de ESTA hoja * Ultimo Costo (si es 0, usa Costo Promedio)',
     'Estado': 'Calculado - COMPRAR si hay cantidad a pedir en ESTA hoja, si no NO COMPRAR',
+    'Sobrantes Disp': 'Sobrante (Objetivo disp - Stock_Total) (positivo = falta, negativo = sobra)',
+    'Sobrantes Remi': 'Sobrante (objetivo remi - Bodega Sobrante) (positivo = falta, negativo = sobra)',
+    'Total Sobrantes': 'Unidades físicas que sobran (sin doble conteo)'
 }
 
 
@@ -83,14 +86,30 @@ def _limpiar_df(df):
         df[col] = df[col].astype(str).str.replace(_CHARS_ILEGALES, '', regex=True)
     return df
 
+def leer_con_encabezado(ruta, col_clave, max_filas=10, **kwargs):
+    filas_encabezado = None
+    preview = pd.read_excel(ruta, header=None, nrows=max_filas)
+    for i in range(len(preview)):
+        valores_fila = preview.iloc[i].astype(str).str.strip().values
+        if col_clave in valores_fila:
+            filas_encabezado = i
+            break
+    if filas_encabezado is None:
+        raise ValueError(f"No encontre '{col_clave}' en las primeras {max_filas} filas de {ruta}.")
+    df = pd.read_excel(ruta, skiprows=filas_encabezado, **kwargs)
 
-def cargar_datos():
-    maestro = pd.read_excel(RUTA_MAESTRO)
-    molecula_compra = pd.read_excel(RUTA_MOLECULAS)
+    if str(df.columns[0]).startswith('Unnamed') and df.iloc[:, 0].isna().all():
+        df = df.drop(columns=df.columns[0])
+    return df
+
+def cargar_datos(RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES, RUTA_STOCK_BODEGA,
+                 RUTA_STOCK_PUNTOS, RUTA_MOLECULAS):
+    maestro = leer_con_encabezado(RUTA_MAESTRO, 'Codigo')
+    molecula_compra = leer_con_encabezado(RUTA_MOLECULAS, 'Codigo Articulo')
     consumo_dispensacion = pd.read_excel(RUTA_DISPENSACION)
     consumo_remisiones = pd.read_excel(RUTA_REMISIONES)
-    stock_bodega = pd.read_excel(RUTA_STOCK_BODEGA)
-    stock_puntos = pd.read_excel(RUTA_STOCK_PUNTOS)
+    stock_bodega = leer_con_encabezado(RUTA_STOCK_BODEGA, 'Codigo Articulo')
+    stock_puntos = leer_con_encabezado(RUTA_STOCK_PUNTOS, 'Codigo Articulo')
     return maestro, consumo_dispensacion, consumo_remisiones, stock_bodega, stock_puntos, molecula_compra
 
 
@@ -149,7 +168,7 @@ def construir_hojas(processor):
                 'Rotacion', 'Rotacion_Dispensacion', 'Rotacion_Remisiones','Demanda_Disp_Mensual',
                 'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria',
                 'Necesidad_Disp','Necesidad_Rem','Necesidad_Mensual','Valorizado Promedio Sin Rest Inv','Valorizado Ult Costo Sin Rest Inv', 'Stock_Bodega_Principal',
-                'Stock_Puntos_Dispensacion','Stock_Total','Cantidad a Pedir','Estado',
+                'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp','Sobrantes Remi','Total Sobrantes','Cantidad a Pedir','Estado',
                 'Valorizado Promedio','Valorizado Ult Costo','Pedir_NEPS_Capita', 'Pedir_NEPS_Evento','Pedir_FOMAG_Evento',
                 'Pedir_Dispensacion_Total','Pedir_Remisiones']
     hojas['Todo'] = (df[[c for c in colsTodo if c in df.columns]]
@@ -167,7 +186,7 @@ def construir_hojas(processor):
     return hojas
 
 
-def exportar_excel(processor, ruta=None):
+def exportar_excel(processor, ruta=None, buffer=None):
     if ruta is None:
         ruta = f'Excel Proyeccion/Resultados_Proyeccion_{date.today():%Y-%m-%d}.xlsx'
 
@@ -178,8 +197,12 @@ def exportar_excel(processor, ruta=None):
     relleno_desc = PatternFill('solid', fgColor='FFF3E0')
     alineacion_desc = Alignment(wrap_text=True, vertical='top')
     grupo_1_color = PatternFill('solid', fgColor='D9EAD3')
-    celdas_grupo_1 = ['AL2', 'AN2', 'AO2']
+    celdas_grupo_1 = ['AO2', 'AQ2', 'AR2']
     grupo_2_color = PatternFill('solid', fgColor='CCF2FF')
+    color_fila_estado_rojo = PatternFill('solid', fgColor='FF9B9B')
+    color_fila_estado_verde = PatternFill('solid', fgColor='D9EAD3')
+    color_celda_estado = PatternFill('solid', fgColor='FFFF09')
+    color_celdas_sobrantes = PatternFill('solid', fgColor='9EB8CA')
 
     def _escribir(destino):
         with pd.ExcelWriter(destino, engine='openpyxl') as writer:
@@ -201,9 +224,36 @@ def exportar_excel(processor, ruta=None):
                 ws.row_dimensions[1].height = 60
                 if ws.max_row > 2:
                     ws.auto_filter.ref = f'A2:{ws.cell(2, ws.max_column).coordinate}'
+
+                #Color Columna estado (Comprar/No Comprar)
+                if nombre == 'Todo' and 'Estado' in sub.columns:
+                    # La columna Estado se corre segun cuantas columnas mensuales
+                    # haya, asi que se ubica por nombre en vez de fijarla a mano.
+                    col_estado = list(sub.columns).index('Estado') + 1
+                    for r in range(3, ws.max_row + 1):
+                        celda_estado = ws.cell(row=r, column=col_estado)
+                        valor = str(celda_estado.value).strip().upper() if celda_estado.value is not None else ""
+                        if valor == 'COMPRAR':
+                            celda_estado.fill = color_fila_estado_verde
+                        elif valor == 'NO COMPRAR':
+                            celda_estado.fill = color_fila_estado_rojo
+                #Color celdas sobrantes
+                if nombre == 'Todo':
+                    for sob in ws['AL2:AN2']:
+                        for sob2 in sob:
+                            sob2.fill = color_celdas_sobrantes
+
+                #Color celda Estado
+                if nombre == 'Todo':
+                   celdaE = ws['AP2']
+                   celdaE.fill = color_celda_estado
+
+                #Color celdas sin rest inv
                 if nombre == 'Todo':
                     for celda in celdas_grupo_1:
                         ws[celda].fill = grupo_1_color
+
+                #Color rest Inv
                 if nombre == 'Todo':
                     for fila2 in ws['AF2:AH2']:
                         for celda in fila2:
@@ -218,6 +268,13 @@ def exportar_excel(processor, ruta=None):
                     ancho = max((len(str(v)) for v in muestra if v is not None), default=8)
                     ws.column_dimensions[letra].width = min(max(ancho + 2, 12), 40)
 
+    if buffer is not None:
+        _escribir(buffer)
+        buffer.seek(0)
+        return buffer
+
+    if ruta is None:
+        ruta = f'Excel Proyeccion/Resultados_Proyeccion_{date.today():%Y-%m-%d}.xlsx'
     try:
         _escribir(ruta)
     except PermissionError:
@@ -234,7 +291,8 @@ def exportar_excel(processor, ruta=None):
 
 
 def main():
-    maestro, consumo_dispensacion, consumo_remisiones, stock_bodega, stock_puntos, molecula_compra = cargar_datos()
+    maestro, consumo_dispensacion, consumo_remisiones, stock_bodega, stock_puntos, molecula_compra = cargar_datos(RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES,
+                                                                                                                  RUTA_STOCK_BODEGA, RUTA_STOCK_PUNTOS, RUTA_MOLECULAS)
 
     processor = ProyeccionProcessor(maestro, consumo_dispensacion, consumo_remisiones, stock_bodega, stock_puntos, molecula_compra)
     processor.procesar()

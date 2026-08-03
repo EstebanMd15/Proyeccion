@@ -30,7 +30,8 @@ class ProyeccionProcessor:
     )
 
     def __init__(self, maestro, consumo_dispensacion, consumo_remisiones, stock_bodega, stock_puntos, molecula_compra,
-                 criterio_rotacion=None,):
+                 criterio_rotacion=None, cobertura_dias_DISP = None, lead_time_dias_DISP = None, dias_seguridad_DISP = None,
+                 cobertura_dias_REMI = None, lead_time_dias_REMI = None, dias_seguridad_REMI = None, umbral_A=None, umbral_M=None):
         self.maestro = maestro
         self.consumo_dispensacion = consumo_dispensacion
         self.consumo_remisiones = consumo_remisiones
@@ -41,14 +42,14 @@ class ProyeccionProcessor:
         self.maestro_consumo = None
 
         self.criterio_rotacion = criterio_rotacion or getattr(config, 'CRITERIO_ROTACION', 'volumen')
-        self.cobertura_dias_DISP = getattr(config, 'COBERTURA_DIAS_DISP', {'A': 30, 'M': 30, 'B': 30})
-        self.lead_time_dias_DISP = getattr(config, 'LEAD_TIME_DIAS_DISP', 30)
-        self.dias_seguridad_DISP = getattr(config, 'DIAS_SEGURIDAD_DISP', 15)
-        self.cobertura_dias_REMI = getattr(config, 'COBERTURA_DIAS_REMI', {'A': 30, 'M': 30, 'B': 30})
-        self.lead_time_dias_REMI = getattr(config, 'LEAD_TIME_DIAS_REMI', 30)
-        self.dias_seguridad_REMI = getattr(config, 'DIAS_SEGURIDAD_REMI', 15)
-        self.umbral_A = getattr(config, 'UMBRAL_A', 80)
-        self.umbral_M = getattr(config, 'UMBRAL_M', 95)
+        self.cobertura_dias_DISP = cobertura_dias_DISP if cobertura_dias_DISP is not None else getattr(config, 'COBERTURA_DIAS_DISP', {'A': 30, 'M': 30, 'B': 30})
+        self.lead_time_dias_DISP = lead_time_dias_DISP if lead_time_dias_DISP is not None else getattr(config, 'LEAD_TIME_DIAS_DISP', 30)
+        self.dias_seguridad_DISP = dias_seguridad_DISP if dias_seguridad_DISP is not None else getattr(config, 'DIAS_SEGURIDAD_DISP', 15)
+        self.cobertura_dias_REMI = cobertura_dias_REMI if cobertura_dias_REMI is not None else getattr(config, 'COBERTURA_DIAS_REMI', {'A': 30, 'M': 30, 'B': 30})
+        self.lead_time_dias_REMI = lead_time_dias_REMI if lead_time_dias_REMI is not None else getattr(config, 'LEAD_TIME_DIAS_REMI', 30)
+        self.dias_seguridad_REMI = dias_seguridad_REMI if dias_seguridad_REMI is not None else getattr(config, 'DIAS_SEGURIDAD_REMI', 15)
+        self.umbral_A = umbral_A if umbral_A is not None else getattr(config, 'UMBRAL_A', 80)
+        self.umbral_M = umbral_M if umbral_M is not None else getattr(config, 'UMBRAL_M', 95)
 
     def calcular_ponderados(self, consumo, col_periodo='PERIODO', col_codigo='Codigo', col_cantidad='Consumo_Dispensacion'):
         df = consumo.copy()
@@ -534,6 +535,12 @@ class ProyeccionProcessor:
         pedir_com = np.ceil((objetivo_remi - bodega_sobrante_1).clip(lower=0)).astype('int64')
         df['Pedir_Remisiones'] = pedir_com
         df['Cantidad a Pedir'] = (pedir_disp + pedir_com).astype('int64')
+
+        #Columnas sobrantes Dispe/Remi y Sobrante Total
+        df['Sobrantes Disp'] = np.ceil(objetivo_disp - df['Stock_Total']).astype('int64')
+        df['Sobrantes Remi'] = np.ceil(objetivo_remi - bodega_sobrante_1).astype('int64')
+        df['Total Sobrantes'] = np.ceil(np.minimum(objetivo_disp, df['Stock_Total']) +
+                                   np.minimum(objetivo_remi, bodega_sobrante_1) - df['Stock_Total']).astype('int64')
 
         #Columna 2: Remi primero -> Dispensacion toma el restante
         bodega_sobrante_2 = (df['Stock_Bodega_Principal'] - objetivo_remi).clip(lower=0)
