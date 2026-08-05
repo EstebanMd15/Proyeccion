@@ -536,6 +536,26 @@ class ProyeccionProcessor:
         df['Pedir_Remisiones'] = pedir_com
         df['Cantidad a Pedir'] = (pedir_disp + pedir_com).astype('int64')
 
+        #Columna pedir sin CEDI
+        pedir_disp_sinCEDI = np.ceil((objetivo_disp - df['Stock_Bodega_Principal']).clip(lower=0)).astype('int64')
+        df['Cantidad a Pedir sin CEDI'] = pedir_disp_sinCEDI + pedir_remi
+        df['Pedir Remisiones sin CEDI'] = np.ceil(objetivo_remi.clip(lower=0)).astype('int64')
+        df['Pedir Dispensacion Total sin CEDI'] = np.ceil((objetivo_disp - df['Stock_Bodega_Principal']).clip(lower=0)).astype('int64')
+        if cols_disp:
+            partes_sinCEDI = self._prorratear_entero(pedir_disp_sinCEDI, df[cols_disp].clip(lower=0))
+            for col in cols_disp:
+                df[self.SEGMENTOS_CONTRATO[col] + ' sin CEDI'] = partes_sinCEDI[col]
+
+        #Columna pedir sin PUNTOS
+        pedir_disp_sinPUNTOS = np.ceil((objetivo_disp - puntos).clip(lower=0)).astype('int64')
+        df['Cantidad a Pedir sin PUNTOS'] = np.ceil((pedir_disp_sinPUNTOS + objetivo_remi)).astype('int64')
+        df['Pedir Remisiones sin PUNTOS'] = np.ceil(pedir_remi.clip(lower=0)).astype('int64')
+        df['Pedir Dispensacion Total sin PUNTOS'] = np.ceil((objetivo_disp - puntos).clip(lower=0)).astype('int64')
+        if cols_disp:
+            partes_sinPUNTOS = self._prorratear_entero(pedir_disp_sinPUNTOS, df[cols_disp].clip(lower=0))
+            for col in cols_disp:
+                df[self.SEGMENTOS_CONTRATO[col] + ' sin PUNTOS'] = partes_sinPUNTOS[col]
+
         #Columnas sobrantes Dispe/Remi y Sobrante Total
         df['Sobrantes Disp'] = np.ceil(objetivo_disp - df['Stock_Total']).astype('int64')
         df['Sobrantes Remi'] = np.ceil(objetivo_remi - bodega_sobrante_1).astype('int64')
@@ -572,6 +592,15 @@ class ProyeccionProcessor:
                                                        df.get('Ultimo Costo'), df.get('Ultimo Costo'))
         df['Valorizado Promedio Sin Rest Inv'] = self._valorizar(df['Necesidad_Mensual'],
                                                        df.get('Costo Promedio'), df.get('Costo Promedio'))
+        df['Valorizado Ult Costo Sin CEDI'] = self._valorizar(df['Cantidad a Pedir sin CEDI'],
+                                                              df.get('Ultimo Costo'), df.get('Ultimo Costo'))
+        df['Valorizado Promedio sin CEDI'] = self._valorizar(df['Cantidad a Pedir sin CEDI'],
+                                                             df.get('Costo Promedio'), df.get('Costo Promedio'))
+        df['Valorizado Ult Costo sin PUNTOS'] = self._valorizar(df['Cantidad a Pedir sin PUNTOS'],
+                                                                df.get('Ultimo Costo'), df.get('Ultimo Costo'))
+        df['Valorizado Promedio sin PUNTOS'] = self._valorizar(df['Cantidad a Pedir sin PUNTOS'],
+                                                               df.get('Costo Promedio'), df.get('Costo Promedio'))
+
         df['Estado'] = np.where(df['Cantidad a Pedir'] > 0, 'COMPRAR', 'NO COMPRAR')
 
         agregados = {

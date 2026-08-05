@@ -161,7 +161,7 @@ def construir_hojas(processor):
     hojas['Remisiones'] = rem
 
     # ------------------------------------------------------------------ TODO
-    colsTodo = ['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula','Nombre Comercial', 'Grupo', 'Proveedor',
+    colsTodo = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Nombre Comercial', 'Grupo', 'Proveedor',
                 'Costo Promedio', 'Ultimo Costo', 'Consumo_Molecula', 'Consumo_NEPS_Capita',
                 'Consumo_NEPS_Evento', 'Consumo_FOMAG_Evento', 'Consumo_Dispensacion_Total',
                 'Consumo_Remisiones', *mensuales, 'Consumo_Acum',
@@ -173,6 +173,34 @@ def construir_hojas(processor):
                 'Pedir_Dispensacion_Total','Pedir_Remisiones']
     hojas['Todo'] = (df[[c for c in colsTodo if c in df.columns]]
                      .sort_values('Cantidad a Pedir', ascending=False))
+
+    # -------------------------------------------------------------- TODO SIN CEDI
+    colsTodoSinCedi = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Nombre Comercial', 'Grupo', 'Proveedor',
+                'Costo Promedio', 'Ultimo Costo', 'Consumo_Molecula', 'Consumo_NEPS_Capita',
+                'Consumo_NEPS_Evento', 'Consumo_FOMAG_Evento', 'Consumo_Dispensacion_Total',
+                'Consumo_Remisiones', *mensuales, 'Consumo_Acum',
+                'Rotacion', 'Rotacion_Dispensacion', 'Rotacion_Remisiones','Demanda_Disp_Mensual',
+                'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria',
+                'Necesidad_Disp','Necesidad_Rem','Necesidad_Mensual','Valorizado Promedio Sin Rest Inv','Valorizado Ult Costo Sin Rest Inv', 'Stock_Bodega_Principal',
+                'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp','Sobrantes Remi','Total Sobrantes','Cantidad a Pedir sin CEDI','Estado',
+                'Valorizado Promedio sin CEDI','Valorizado Ult Costo sin CEDI','Pedir_NEPS_Capita sin CEDI', 'Pedir_NEPS_Evento sin CEDI','Pedir_FOMAG_Evento sin CEDI',
+                'Pedir Dispensacion Total sin CEDI','Pedir Remisiones sin CEDI']
+    hojas['Todo sin CEDI'] = (df[[c for c in colsTodoSinCedi if c in df.columns]]
+                            .sort_values('Cantidad a Pedir sin CEDI', ascending=False)).copy()
+
+    #--------------------------------------------------------------- TODO SIN PUNTOS
+    colsTodoSinPuntos = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Nombre Comercial', 'Grupo', 'Proveedor',
+                'Costo Promedio', 'Ultimo Costo', 'Consumo_Molecula', 'Consumo_NEPS_Capita',
+                'Consumo_NEPS_Evento', 'Consumo_FOMAG_Evento', 'Consumo_Dispensacion_Total',
+                'Consumo_Remisiones', *mensuales, 'Consumo_Acum',
+                'Rotacion', 'Rotacion_Dispensacion', 'Rotacion_Remisiones','Demanda_Disp_Mensual',
+                'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria',
+                'Necesidad_Disp','Necesidad_Rem','Necesidad_Mensual','Valorizado Promedio Sin Rest Inv','Valorizado Ult Costo Sin Rest Inv', 'Stock_Bodega_Principal',
+                'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp','Sobrantes Remi','Total Sobrantes','Cantidad a Pedir sin PUNTOS','Estado',
+                'Valorizado Promedio sin PUNTOS','Valorizado Ult Costo sin PUNTOS','Pedir_NEPS_Capita sin PUNTOS', 'Pedir_NEPS_Evento sin PUNTOS','Pedir_FOMAG_Evento sin PUNTOS',
+                'Pedir Dispensacion Total sin PUNTOS','Pedir Remisiones sin PUNTOS']
+    hojas['Todo sin PUNTOS'] = (df[[c for c in colsTodoSinPuntos if c in df.columns]]
+    )                           .sort_values('Cantidad a Pedir sin PUNTOS', ascending=False).copy()
 
     # -------------------------------------------------------------- MOLECULA
     cols = ['Codigo_Molecula', 'Molecula','Nombre Comercial', 'N_Productos', 'Rotacion',
@@ -197,7 +225,7 @@ def exportar_excel(processor, ruta=None, buffer=None):
     relleno_desc = PatternFill('solid', fgColor='FFF3E0')
     alineacion_desc = Alignment(wrap_text=True, vertical='top')
     grupo_1_color = PatternFill('solid', fgColor='D9EAD3')
-    celdas_grupo_1 = ['AO2', 'AQ2', 'AR2']
+    celdas_grupo_1 = ['AP2', 'AR2', 'AS2']
     grupo_2_color = PatternFill('solid', fgColor='CCF2FF')
     color_fila_estado_rojo = PatternFill('solid', fgColor='FF9B9B')
     color_fila_estado_verde = PatternFill('solid', fgColor='D9EAD3')
@@ -237,25 +265,84 @@ def exportar_excel(processor, ruta=None, buffer=None):
                             celda_estado.fill = color_fila_estado_verde
                         elif valor == 'NO COMPRAR':
                             celda_estado.fill = color_fila_estado_rojo
+
+                #Color columna Estado Hoja Todo sin CEDI
+                if nombre == 'Todo sin CEDI' and 'Estado' in sub.columns:
+                    col_estado = list(sub.columns).index('Estado') + 1
+                    for r in range(3, ws.max_row + 1):
+                        celda_estado = ws.cell(row=r, column=col_estado)
+                        valor = str(celda_estado.value).strip().upper() if celda_estado.value is not None else ""
+                        if valor == 'COMPRAR':
+                            celda_estado.fill = color_fila_estado_verde
+                        elif valor == 'NO COMPRAR':
+                            celda_estado.fill = color_fila_estado_rojo
+
+                #Color columna Estado hoja Todo sin PUNTOS
+                if nombre == 'Todo sin PUNTOS' and 'Estado' in sub.columns:
+                    col_estado = list(sub.columns).index('Estado') + 1
+                    for r in range(3, ws.max_row + 1):
+                        celda_estado = ws.cell(row=r, column=col_estado)
+                        valor = str(celda_estado.value).strip().upper() if celda_estado.value is not None else ""
+                        if valor == 'COMPRAR':
+                            celda_estado.fill = color_fila_estado_verde
+                        elif valor == 'NO COMPRAR':
+                            celda_estado.fill = color_fila_estado_rojo
+
+                #Color celdas sobrantes hoja Todo sin CEDI
+                if nombre == 'Todo sin CEDI':
+                    for sob in ws['AM2:AO2']:
+                        for sob2 in sob:
+                            sob2.fill = color_celdas_sobrantes
+                #Color celdas sobrantes hoja Todo sin PUNTOS
+                if nombre == 'Todo sin PUNTOS':
+                    for sob in ws['AM2:AO2']:
+                        for sob2 in sob:
+                            sob2.fill = color_celdas_sobrantes
                 #Color celdas sobrantes
                 if nombre == 'Todo':
-                    for sob in ws['AL2:AN2']:
+                    for sob in ws['AM2:AO2']:
                         for sob2 in sob:
                             sob2.fill = color_celdas_sobrantes
 
+                #Color celda Estado Hoja Todo sin CEDI
+                if nombre == 'Todo sin CEDI':
+                    celdaE =ws['AQ2']
+                    celdaE.fill = color_celda_estado
+                #Color celda Estado Hoja Todo sin PUNTOS
+                if nombre == 'Todo sin PUNTOS':
+                    celdaE =ws['AQ2']
+                    celdaE.fill = color_celda_estado
                 #Color celda Estado
                 if nombre == 'Todo':
-                   celdaE = ws['AP2']
+                   celdaE = ws['AQ2']
                    celdaE.fill = color_celda_estado
 
+                #Color celdas sin rest inv hoja Todo sin CEDI
+                if nombre == 'Todo sin CEDI':
+                    for celda in celdas_grupo_1:
+                        ws[celda].fill = grupo_1_color
+                #Color celdas sin rest inv hoja Todo sin PUNTOS
+                if nombre == 'Todo sin PUNTOS':
+                    for celda in celdas_grupo_1:
+                        ws[celda].fill = grupo_1_color
                 #Color celdas sin rest inv
                 if nombre == 'Todo':
                     for celda in celdas_grupo_1:
                         ws[celda].fill = grupo_1_color
 
+                #Color rest inv hoja Todo sin CEDI
+                if nombre == 'Todo sin CEDI':
+                    for fila2 in ws['AG2:AI2']:
+                        for celda in fila2:
+                            celda.fill = grupo_2_color
+                #Color rest inv hoja Todo sin PUNTOS
+                if nombre == 'Todo sin PUNTOS':
+                    for fila2 in ws['AG2:AI2']:
+                        for celda in fila2:
+                            celda.fill = grupo_2_color
                 #Color rest Inv
                 if nombre == 'Todo':
-                    for fila2 in ws['AF2:AH2']:
+                    for fila2 in ws['AG2:AI2']:
                         for celda in fila2:
                             celda.fill = grupo_2_color
 
