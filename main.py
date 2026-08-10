@@ -2,6 +2,7 @@ import re
 import pandas as pd
 from datetime import date, datetime
 from openpyxl.styles import Font, Alignment, PatternFill
+from openpyxl.worksheet.datavalidation import DataValidation
 
 from config import RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES, RUTA_STOCK_BODEGA, RUTA_STOCK_PUNTOS, RUTA_MOLECULAS
 from processor import ProyeccionProcessor
@@ -185,7 +186,7 @@ def construir_hojas(processor):
                 'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp','Sobrantes Remi','Total Sobrantes','Cantidad a Pedir sin CEDI','Estado',
                 'Valorizado Promedio sin CEDI','Valorizado Ult Costo sin CEDI','Pedir_NEPS_Capita sin CEDI', 'Pedir_NEPS_Evento sin CEDI','Pedir_FOMAG_Evento sin CEDI',
                 'Pedir Dispensacion Total sin CEDI','Pedir Remisiones sin CEDI']
-    hojas['Todo sin CEDI'] = (df[[c for c in colsTodoSinCedi if c in df.columns]]
+    hojas['Todo REST CEDI'] = (df[[c for c in colsTodoSinCedi if c in df.columns]]
                             .sort_values('Cantidad a Pedir sin CEDI', ascending=False)).copy()
 
     #--------------------------------------------------------------- TODO SIN PUNTOS
@@ -199,7 +200,7 @@ def construir_hojas(processor):
                 'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp','Sobrantes Remi','Total Sobrantes','Cantidad a Pedir sin PUNTOS','Estado',
                 'Valorizado Promedio sin PUNTOS','Valorizado Ult Costo sin PUNTOS','Pedir_NEPS_Capita sin PUNTOS', 'Pedir_NEPS_Evento sin PUNTOS','Pedir_FOMAG_Evento sin PUNTOS',
                 'Pedir Dispensacion Total sin PUNTOS','Pedir Remisiones sin PUNTOS']
-    hojas['Todo sin PUNTOS'] = (df[[c for c in colsTodoSinPuntos if c in df.columns]]
+    hojas['Todo REST PUNTOS'] = (df[[c for c in colsTodoSinPuntos if c in df.columns]]
     )                           .sort_values('Cantidad a Pedir sin PUNTOS', ascending=False).copy()
 
     # -------------------------------------------------------------- MOLECULA
@@ -210,6 +211,9 @@ def construir_hojas(processor):
     mol = processor.pedido_molecula
     hojas['Pedido_Molecula'] = (mol[[c for c in cols if c in mol.columns]]
                                 .sort_values('Cantidad a Pedir', ascending=False))
+
+    for sub in hojas.values():
+        sub['Usuario ODC'] = ''
 
     return hojas
 
@@ -225,12 +229,18 @@ def exportar_excel(processor, ruta=None, buffer=None):
     relleno_desc = PatternFill('solid', fgColor='FFF3E0')
     alineacion_desc = Alignment(wrap_text=True, vertical='top')
     grupo_1_color = PatternFill('solid', fgColor='D9EAD3')
-    celdas_grupo_1 = ['AP2', 'AR2', 'AS2']
     grupo_2_color = PatternFill('solid', fgColor='CCF2FF')
     color_fila_estado_rojo = PatternFill('solid', fgColor='FF9B9B')
     color_fila_estado_verde = PatternFill('solid', fgColor='D9EAD3')
     color_celda_estado = PatternFill('solid', fgColor='FFFF09')
     color_celdas_sobrantes = PatternFill('solid', fgColor='9EB8CA')
+
+
+    def colorear_encabezados(ws, sub, nombre_col, fill):
+        if nombre_col in sub.columns:
+
+            idx = list(sub.columns).index(nombre_col) + 1
+            ws.cell(row=2, column=idx).fill = fill
 
     def _escribir(destino):
         with pd.ExcelWriter(destino, engine='openpyxl') as writer:
@@ -240,6 +250,19 @@ def exportar_excel(processor, ruta=None, buffer=None):
                 # los titulos quedan en la fila 2 y los datos desde la 3.
                 sub.to_excel(writer, sheet_name=nombre[:31], index=False, startrow=1)
                 ws = writer.sheets[nombre[:31]]
+
+                if 'Usuario ODC' in sub.columns:
+                    dv = DataValidation(
+                        type="list",
+                        formula1='"NMEDINA,DGUACAS,YPEREZ,DMENESES,DHURTADO,JMONCAYO,DISPONIBLE OTRO CODIGO,EN BODEGA,'
+                                 'DESCONTINUADO,AGOTADO,BAJO PEDIDO,BAJA ROTACION,SOLICITAR OTRO PROVEEDOR"',
+                        allow_blank=True
+                    )
+                    ws.add_data_validation(dv)
+
+                    idx = list(sub.columns).index('Usuario ODC') + 1
+                    letra = ws.cell(row=2, column=idx).column_letter
+                    dv.add(f'{letra}3:{letra}{ws.max_row}')
 
                 for j, col in enumerate(sub.columns, start=1):
                     celda = ws.cell(row=1, column=j, value=_descripcion_columna(col))
@@ -253,98 +276,27 @@ def exportar_excel(processor, ruta=None, buffer=None):
                 if ws.max_row > 2:
                     ws.auto_filter.ref = f'A2:{ws.cell(2, ws.max_column).coordinate}'
 
-                #Color Columna estado (Comprar/No Comprar)
-                if nombre == 'Todo' and 'Estado' in sub.columns:
-                    # La columna Estado se corre segun cuantas columnas mensuales
-                    # haya, asi que se ubica por nombre en vez de fijarla a mano.
+                if nombre in ('Todo', 'Todo REST CEDI', 'Todo REST PUNTOS') and 'Estado' in sub.columns:
                     col_estado = list(sub.columns).index('Estado') + 1
                     for r in range(3, ws.max_row + 1):
                         celda_estado = ws.cell(row=r, column=col_estado)
                         valor = str(celda_estado.value).strip().upper() if celda_estado.value is not None else ""
                         if valor == 'COMPRAR':
                             celda_estado.fill = color_fila_estado_verde
-                        elif valor == 'NO COMPRAR':
+                        if valor == 'NO COMPRAR':
                             celda_estado.fill = color_fila_estado_rojo
-
-                #Color columna Estado Hoja Todo sin CEDI
-                if nombre == 'Todo sin CEDI' and 'Estado' in sub.columns:
-                    col_estado = list(sub.columns).index('Estado') + 1
-                    for r in range(3, ws.max_row + 1):
-                        celda_estado = ws.cell(row=r, column=col_estado)
-                        valor = str(celda_estado.value).strip().upper() if celda_estado.value is not None else ""
-                        if valor == 'COMPRAR':
-                            celda_estado.fill = color_fila_estado_verde
-                        elif valor == 'NO COMPRAR':
-                            celda_estado.fill = color_fila_estado_rojo
-
-                #Color columna Estado hoja Todo sin PUNTOS
-                if nombre == 'Todo sin PUNTOS' and 'Estado' in sub.columns:
-                    col_estado = list(sub.columns).index('Estado') + 1
-                    for r in range(3, ws.max_row + 1):
-                        celda_estado = ws.cell(row=r, column=col_estado)
-                        valor = str(celda_estado.value).strip().upper() if celda_estado.value is not None else ""
-                        if valor == 'COMPRAR':
-                            celda_estado.fill = color_fila_estado_verde
-                        elif valor == 'NO COMPRAR':
-                            celda_estado.fill = color_fila_estado_rojo
-
-                #Color celdas sobrantes hoja Todo sin CEDI
-                if nombre == 'Todo sin CEDI':
-                    for sob in ws['AM2:AO2']:
-                        for sob2 in sob:
-                            sob2.fill = color_celdas_sobrantes
-                #Color celdas sobrantes hoja Todo sin PUNTOS
-                if nombre == 'Todo sin PUNTOS':
-                    for sob in ws['AM2:AO2']:
-                        for sob2 in sob:
-                            sob2.fill = color_celdas_sobrantes
-                #Color celdas sobrantes
-                if nombre == 'Todo':
-                    for sob in ws['AM2:AO2']:
-                        for sob2 in sob:
-                            sob2.fill = color_celdas_sobrantes
-
-                #Color celda Estado Hoja Todo sin CEDI
-                if nombre == 'Todo sin CEDI':
-                    celdaE =ws['AQ2']
-                    celdaE.fill = color_celda_estado
-                #Color celda Estado Hoja Todo sin PUNTOS
-                if nombre == 'Todo sin PUNTOS':
-                    celdaE =ws['AQ2']
-                    celdaE.fill = color_celda_estado
-                #Color celda Estado
-                if nombre == 'Todo':
-                   celdaE = ws['AQ2']
-                   celdaE.fill = color_celda_estado
-
-                #Color celdas sin rest inv hoja Todo sin CEDI
-                if nombre == 'Todo sin CEDI':
-                    for celda in celdas_grupo_1:
-                        ws[celda].fill = grupo_1_color
-                #Color celdas sin rest inv hoja Todo sin PUNTOS
-                if nombre == 'Todo sin PUNTOS':
-                    for celda in celdas_grupo_1:
-                        ws[celda].fill = grupo_1_color
-                #Color celdas sin rest inv
-                if nombre == 'Todo':
-                    for celda in celdas_grupo_1:
-                        ws[celda].fill = grupo_1_color
-
-                #Color rest inv hoja Todo sin CEDI
-                if nombre == 'Todo sin CEDI':
-                    for fila2 in ws['AG2:AI2']:
-                        for celda in fila2:
-                            celda.fill = grupo_2_color
-                #Color rest inv hoja Todo sin PUNTOS
-                if nombre == 'Todo sin PUNTOS':
-                    for fila2 in ws['AG2:AI2']:
-                        for celda in fila2:
-                            celda.fill = grupo_2_color
-                #Color rest Inv
-                if nombre == 'Todo':
-                    for fila2 in ws['AG2:AI2']:
-                        for celda in fila2:
-                            celda.fill = grupo_2_color
+                    for c in ['Sobrantes Disp', 'Sobrantes Remi', 'Total Sobrantes']:
+                        colorear_encabezados(ws, sub, c, color_celdas_sobrantes)
+                    for e in ('Estado','Usuario ODC'):
+                        colorear_encabezados(ws, sub, e, color_celda_estado)
+                    for j in ('Cantidad a Pedir', 'Valorizado Promedio', 'Valorizado Ult Costo'):
+                        colorear_encabezados(ws, sub, j, grupo_1_color)
+                    for i in ('Cantidad a Pedir sin CEDI', 'Valorizado Promedio sin CEDI', 'Valorizado Ult Costo sin CEDI'):
+                        colorear_encabezados(ws, sub, i, grupo_1_color)
+                    for h in ('Cantidad a Pedir sin PUNTOS', 'Valorizado Promedio sin PUNTOS', 'Valorizado Ult Costo sin PUNTOS'):
+                        colorear_encabezados(ws, sub, h, grupo_1_color)
+                    for c in ('Necesidad_Mensual', 'Valorizado Promedio Sin Rest Inv', 'Valorizado Ult Costo Sin Rest Inv'):
+                        colorear_encabezados(ws, sub, c, grupo_2_color)
 
                 # Ancho por columna, ignorando la fila de procedencia (es larga y
                 # va con ajuste de texto); se mide sobre titulo + una muestra de datos.
