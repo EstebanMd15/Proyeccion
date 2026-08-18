@@ -79,10 +79,12 @@ input {
 }
 .card-modelo {
     cursor: pointer;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .card-modelo:hover {
-    border-color: var(--muted);
+    transform: translateY(-4px) scale(1.02);
+    border-color: var(--green);
+    box-shadow: 0 6px 20px rgba(63, 185, 80, 0.25);
 }
 .card-modelo.activa {
     border-color: var(--green);

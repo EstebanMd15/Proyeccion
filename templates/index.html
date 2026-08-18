@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Motor Proyeccion de Compras</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=2">
 </head>
 <body>
     <h1>Motor Proyección de Compras </h1>
@@ -122,17 +122,15 @@
         if (e.submitter.value === "dashboard"){
             e.preventDefault();
             const win = window.open("","_blank");
-            win.document.write('<link rel="stylesheet" href="/static/style.css"><div class="overlay" style="display:flex"><div' +
+            win.document.write('<link rel="stylesheet" href="/static/style.css?v=2"><div class="overlay" style="display:flex"><div' +
                 ' class="spinner"></div><p>Generando Dashboard...</p></div>');
 
             const fd = new FormData(form);
             fd.append("accion", "dashboard");
             const resp = await fetch("/generar", {method: "POST", body: fd});
-            const html = await resp.text()
+            const datos = await resp.json();
 
-            win.document.open();
-            win.document.write(html);
-            win.document.close();
+            win.location = "/dashboard/" + datos.id;
 
             return;
         }

@@ -2,7 +2,7 @@ import io
 from fastapi import FastAPI, Request, File, UploadFile, Form
 from fastapi.templating import Jinja2Templates
 from datetime import date
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from main import cargar_datos, exportar_excel
 from processor import ProyeccionProcessor
 from fastapi.staticfiles import StaticFiles
@@ -81,8 +81,6 @@ def generar(request: Request,
             headers={"Content-Disposition": f'attachment; filename="Proyeccion-{date.today():%Y-%m-%d}.xlsx"'},
         )
 
-    download_id = uuid.uuid4().hex
-    resultados[download_id] = buffer.getvalue()
 
     df = proc.maestro_consumo
 
@@ -114,17 +112,36 @@ def generar(request: Request,
              "unidades": f"{int(fila.unidades):,}"}
             for prov, fila in top.iterrows()
         ])
-
-    return templates.TemplateResponse(request, "resultado.html", {
+    download_id = uuid.uuid4().hex
+    resultados[download_id] = {
+        "excel": buffer.getvalue(),
         "tarjetas": tarjetas,
         "proveedores": proveedores,
+
+    }
+    return JSONResponse({"id": download_id}
+    )
+
+@app.get("/dashboard/{download_id}")
+def dashboard(request: Request, download_id: str):
+    data = resultados.get(download_id)
+    if data is None:
+        return templates.TemplateResponse(request, "index.html", {
+            "error": "Ese dashboard ya no está disponible (se reinició el servidor). Genera la proyección de nuevo."
+        })
+    return templates.TemplateResponse(request, "resultado.html", {
+        "tarjetas": data["tarjetas"],
+        "proveedores": data["proveedores"],
         "download_id": download_id,
     })
-
 @app.get("/descargar/{download_id}")
 def descargar(download_id: str):
+    data = resultados.get(download_id)
+    if data is None:
+        return JSONResponse({"error": "Archivo no disponible. Genera la proyección de nuevo."}, status_code=404)
     return StreamingResponse(
-        io.BytesIO(resultados[download_id]),
+        io.BytesIO(data["excel"]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="Proyección-{date.today():%Y-%m-%d}.xlsx"'}
+        headers={"Content-Disposition": f'attachment; filename="Proyeccion-{date.today():%Y-%m-%d}.xlsx"'},
+
     )
