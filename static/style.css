@@ -1,0 +1,256 @@
+:root {
+    --bg: #0b0f14;
+    --panel: #111823;
+    --border: #1f2a37;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --blue: #58a6ff;
+    --red: #f85149;
+    --amber: #d29922;
+}
+
+body {
+    margin: 0 auto;
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+
+    max-width: 1100px;
+    padding: 32px 24px;
+}
+h1 {
+    font-family: 'Cascadia Code', Consolas, monospace;
+    font-size: 28px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: 700;
+    text-shadow: 0 0 12px rgba(63, 185, 80, 0.4);
+
+    background: linear-gradient(90deg, var(--green), var(--blue));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+h1::before {
+    content:"> ";
+    color: var(--green)
+}
+label {
+    display: block;
+    margin-top: 16px;
+    margin-bottom:6px;
+    color: var(--muted);
+    font-size: 15px;
+}
+input {
+    width: 100%;
+    padding: 10px 12px;
+    background-color: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-sizing: border-box;
+    font-family: inherit;
+    font-size: 14px;
+}
+.card {
+    background-color: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-top: 20px;
+}
+.card h2 {
+    margin-top: 0;
+    font-size: 16px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--blue)
+}
+.row {
+    display: flex;
+    gap: 20px;
+}
+.row .card {
+    flex: 1;
+}
+button {
+    margin-top: 24px;
+    padding: 12px 22px;
+    background-color: var(--green);
+    color: var(--bg);
+    border: none;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+}
+button:hover {
+    opacity: 0.9;
+}
+input[type="file"]::file-selector-button {
+    background-color: var(--green);
+    color: var(--bg);
+    border: none;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    margin-right: 12px;
+}
+input[type="file"]::file-selector-button:hover {
+    opacity: 0.9;
+}
+.card {
+    position: relative;
+}
+.card::before {
+    content:"";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--green), transparent);
+    box-shadow: 0 0 15px var(--green);
+}
+.card h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.card h2::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 60%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+}
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button{
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type="number"]{
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+.stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+}
+.stat:last-child {
+    border-bottom: none;
+}
+.stat-label {
+    color: var(--muted);
+    font-size: 14px;
+}
+.stat-value {
+    font-family: 'Cascadia Code', Consolas, monospace;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--green);
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+th. td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+}
+th {
+    color: var(--blue);
+    text-transform: uppercase;
+    font-size: 15px;
+    letter-spacing: 1px;
+}
+td {
+    font-size: 14px;
+}
+tbody tr:hover {
+    background: rgba(88, 166, 255, 0.06);
+}
+th:nth-child(2), th:nth-child(3),
+td:nth-child(2), td:nth-child(3) {
+    text-align: right;
+    font-family: 'Cascadia Code', Consolas, monospace;
+}
+.error {
+    background: rgba(248, 81, 73, 0.12);
+    border: 1px solid var(--red);
+    color: var(--red);
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+.overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(11, 15, 20, 0.9);
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    z-index: 1000;
+}
+.spinner {
+    width: 52px;
+    height: 52px;
+    border: 4px solid var(--border);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+    to { transform: rotate(360deg);}
+}
+.tabla-scroll {
+    max-height: 420px;
+    overflow: auto;
+}
+.tabla-scroll::-webkit-scrollbar {
+    width: 10px;
+}
+.tabla-scroll::-webkit-scrollbar-track {
+    background: var(--bg);
+}
+.tabla-scroll::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 6px;
+}
+.tabla-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+}
+.tabla-scroll {
+    max-height: 420px;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) var(--bg);
+}
+.dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    transition: border-color 0.2s, background 0.2s;
+}
+.dropzone.dragover {
+    border-color: var(--green);
+    background: rgba(63, 185, 80, 0.08);
+}
+.dropzone input[type="file"] {
+    border: none;
+    background: none;
+    padding: 0;
+}

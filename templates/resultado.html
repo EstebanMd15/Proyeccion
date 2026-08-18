@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Resultado - Proyección</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <h1>Resultados</h1>
+    <div class="row">
+        {% for t in tarjetas %}
+        <div class="card">
+            <h2>{{ t.titulo}}</h2>
+            <div class="stat">
+                <span class="stat-label">Valorizado (ult. costo)</span>
+                <span class="stat-value">${{ t.ult }}</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Valorizado (promedio)</span>
+                <span class="stat-value">${{ t.prom }}</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Unidades a Pedir</span>
+                <span class="stat-value">{{ t.und }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+<div class="card">
+        <h2>Proveedores</h2>
+        <input type="text" id="buscador" placeholder="Buscar Proveedor...">
+    <div class="tabla-scroll">
+        <table>
+            <thead>
+            <tr>
+                <th>Proveedor</th>
+                <th>Valorizado</th>
+                <th>Unidades</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for p in top15 %}
+            <tr>
+                <td>{{ p.Proveedor }}</td>
+                <td>${{ p.costo }}</td>
+                <td>{{ p.unidades }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+    <a href="/descargar/{{ download_id }}"><button type="button">Descargar Excel</button></a>
+<script>
+    const buscador = document.getElementById("buscador");
+    const filas = document.querySelectorAll("tbody tr");
+
+    buscador.addEventListener("input", () => {
+        const texto = buscador.value.toLowerCase();
+        filas.forEach((fila) => {
+            const nombre = fila.querySelector("td").textContent.toLowerCase();
+            fila.style.display = nombre.includes(texto) ? "" : "none";
+        });
+    });
+</script>
+</body>
+</html>

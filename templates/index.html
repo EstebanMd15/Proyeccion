@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Motor Proyeccion de Compras</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <h1>Motor Proyección de Compras </h1>
+    <div id="error-box" class="error"
+        {% if not error %}style="display: none"{% endif %}>{{ error or ""}}</div>
+    <form action="/generar" method="post" enctype="multipart/form-data">
+
+        <div class="card">
+            <h2>Archivos de Entrada</h2>
+
+            <label>Archivo Maestro</label>
+            <div class="dropzone">
+                <input type="file" name="maestro" accept=".xls, .xlsx">
+            </div>
+
+            <label>Consumo Dispensación</label>
+            <div class="dropzone">
+                <input type="file" name="dispensacion" accept=".xls, .xlsx">
+            </div>
+
+            <label>Consumo Remisiones</label>
+            <div class="dropzone">
+                <input type="file" name="remisiones" accept=".xls, .xlsx">
+            </div>
+
+            <label>Valorizado Bodega (CEDI)</label>
+            <div class="dropzone">
+                <input type="file" name="stock_bodega" accept=".xls, .xlsx">
+            </div>
+
+            <label>Valorizado Puntos</label>
+            <div class="dropzone">
+                <input type="file" name="stock_puntos" accept=".xls, .xlsx">
+            </div>
+
+            <label>Molécula de Compra</label>
+            <div class="dropzone">
+                <input type="file" name="moleculas" accept=".xls, .xlsx">
+            </div>
+        </div>
+    <div class="row">
+        <div class="card">
+            <h2>Dispensación</h2>
+
+            <label>Cobertura A (días)</label>
+            <input type="number" name="cob_disp_a" value="30" min="0">
+            <label>Cobertura M (días)</label>
+            <input type="number" name="cob_disp_m" value="30" min="0">
+            <label>Cobertura B (días)</label>
+            <input type="number" name="cob_disp_b" value="30" min="0">
+            <label>Lead Time</label>
+            <input type="number" name="lead_disp" value="15" min="0">
+            <label>Días Seguridad</label>
+            <input type="number" name="seg_disp" value="20" min="0">
+        </div>
+
+        <div class="card">
+            <h2>Comercial</h2>
+
+            <label>Cobertura A (días)</label>
+            <input type="number" name="cob_rem_a" value="30" min="0">
+            <label>Cobertura M (días)</label>
+            <input type="number" name="cob_rem_m" value="30" min="0">
+            <label>Cobertura B (días)</label>
+            <input type="number" name="cob_rem_b" value="30" min="0">
+            <label>Lead Time</label>
+            <input type="number" name="lead_rem" value="15" min="0">
+            <label>Días Seguridad</label>
+            <input type="number" name="seg_rem" value="20" min="0">
+        </div>
+    </div>
+        <div class="card">
+            <h2>Umbrales de Rotacion</h2>
+
+            <label>Umbral A (%)</label>
+            <input type="number" name="umbral_a" value="80" min="0" max="100">
+            <label>Umbral M (%)</label>
+            <input type="number" name="umbral_m" value="95" min="0" max="100">
+        </div>
+
+        <button type="submit" name="accion" value="dashboard" formtarget="_blank">Generar Dashboard</button>
+        <button type="submit" name="accion" value="descargar">Generar Proyección</button>
+    </form>
+    <div class="overlay" id="overlay">
+        <div class="spinner"></div>
+        <p>Procesando Proyección...</p>
+    </div>
+<script>
+    const form = document.querySelector("form");
+    const errorBox = document.getElementById("error-box");
+    const overlay = document.getElementById("overlay")
+
+    const archivos = {
+        maestro: "Maestro",
+        dispensacion: "Dispensación",
+        remisiones: "Remisiones",
+        stock_bodega: "Bodega (CEDI)",
+        stock_puntos: "Puntos",
+        moleculas: "Moléculas",
+    };
+    form.addEventListener("submit", async (e) => {
+        const faltantes = [];
+        for (const nombre in archivos){
+            const input = form.querySelector(`input[name="${nombre}"]`);
+            if (input.files.length === 0){
+                faltantes.push(archivos[nombre])
+            }
+        }
+        if (faltantes.length > 0){
+            e.preventDefault();
+            errorBox.textContent = " Faltan estos archivos: " + faltantes.join(", ");
+            errorBox.style.display = "block";
+            errorBox.scrollIntoView({ behavior: "smooth", block: "start"});
+            return;
+        }
+        if (e.submitter.value === "dashboard"){
+            e.preventDefault();
+            const win = window.open("","_blank");
+            win.document.write('<link rel="stylesheet" href="/static/style.css"><div class="overlay" style="display:flex"><div' +
+                ' class="spinner"></div><p>Generando Dashboard...</p></div>');
+
+            const fd = new FormData(form);
+            fd.append("accion", "dashboard");
+            const resp = await fetch("/generar", {method: "POST", body: fd});
+            const html = await resp.text()
+
+            win.document.open();
+            win.document.write(html);
+            win.document.close();
+
+            return;
+        }
+        e.preventDefault();
+        overlay.style.display = "flex";
+        try {
+            const _n = new Date();
+            const hoy = _n.toISOString().slice(0,10) + "_" + String(_n.getHours())
+                .padStart(2,"0") + String(_n.getMinutes()).padStart(2,"0");
+            const fd = new FormData(form);
+            fd.append("accion", "descargar");
+            const resp = await fetch("/generar", {method: "POST", body: fd});
+            if (!resp.ok) throw new Error("fallo");
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "Proyeccion-" + hoy + ".xlsx";
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (err){
+            alert("Hubo un error al generar la proyección.");
+        } finally {
+            overlay.style.display = "none";
+        }
+    });
+    ["dragover", "drop"].forEach((evento) => {
+        window.addEventListener(evento, (e) => e.preventDefault());
+    });
+    document.querySelectorAll(".dropzone").forEach((zona) => {
+        const input = zona.querySelector("input[type=file]");
+
+        zona.addEventListener("dragover", () => zona.classList.add("dragover"));
+        zona.addEventListener("dragleave", () => zona.classList.remove("dragover"));
+        zona.addEventListener("drop", (e) => {
+            zona.classList.remove("dragover");
+            input.files = e.dataTransfer.files;
+        });
+    });
+</script>
+</body>
+</html>
