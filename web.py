@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 import uuid
 app = FastAPI()
 resultados = {}
+MAX_RESULTADOS = 20   # dashboards guardados en memoria; al pasarse se descartan los mas viejos
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
@@ -117,10 +118,11 @@ def generar(request: Request,
         "excel": buffer.getvalue(),
         "tarjetas": tarjetas,
         "proveedores": proveedores,
-
     }
-    return JSONResponse({"id": download_id}
-    )
+    # No dejar crecer la memoria sin limite: descartar los dashboards mas viejos.
+    while len(resultados) > MAX_RESULTADOS:
+        resultados.pop(next(iter(resultados)))
+    return JSONResponse({"id": download_id})
 
 @app.get("/dashboard/{download_id}")
 def dashboard(request: Request, download_id: str):
