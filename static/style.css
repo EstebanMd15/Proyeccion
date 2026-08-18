@@ -77,6 +77,22 @@ input {
 .row .card {
     flex: 1;
 }
+.card-modelo {
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.card-modelo:hover {
+    border-color: var(--muted);
+}
+.card-modelo.activa {
+    border-color: var(--green);
+    box-shadow: 0 0 0 1px var(--green), 0 0 18px rgba(63, 185, 80, 0.25);
+}
+.ayuda {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 4px 0 0;
+}
 button {
     margin-top: 24px;
     padding: 12px 22px;

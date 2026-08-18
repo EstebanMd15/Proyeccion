@@ -7,9 +7,10 @@
 </head>
 <body>
     <h1>Resultados</h1>
+    <p class="ayuda">Haz clic en una tarjeta para ver sus proveedores.</p>
     <div class="row">
         {% for t in tarjetas %}
-        <div class="card">
+        <div class="card card-modelo{% if loop.index0 == 0 %} activa{% endif %}" data-idx="{{ loop.index0 }}">
             <h2>{{ t.titulo}}</h2>
             <div class="stat">
                 <span class="stat-label">Valorizado (ult. costo)</span>
@@ -27,7 +28,7 @@
         {% endfor %}
     </div>
 <div class="card">
-        <h2>Proveedores</h2>
+        <h2>Proveedores &mdash; <span id="modelo-activo">{{ tarjetas[0].titulo }}</span></h2>
         <input type="text" id="buscador" placeholder="Buscar Proveedor...">
     <div class="tabla-scroll">
         <table>
@@ -38,8 +39,8 @@
                 <th>Unidades</th>
             </tr>
             </thead>
-            <tbody>
-            {% for p in top15 %}
+            <tbody id="cuerpo-proveedores">
+            {% for p in proveedores[0] %}
             <tr>
                 <td>{{ p.Proveedor }}</td>
                 <td>${{ p.costo }}</td>
@@ -52,14 +53,43 @@
 </div>
     <a href="/descargar/{{ download_id }}"><button type="button">Descargar Excel</button></a>
 <script>
+    const proveedores = {{ proveedores|tojson }};
+    const cuerpo = document.getElementById("cuerpo-proveedores");
     const buscador = document.getElementById("buscador");
-    const filas = document.querySelectorAll("tbody tr");
+    const modeloActivo = document.getElementById("modelo-activo");
 
-    buscador.addEventListener("input", () => {
+    function filtrar() {
         const texto = buscador.value.toLowerCase();
-        filas.forEach((fila) => {
+        cuerpo.querySelectorAll("tr").forEach((fila) => {
             const nombre = fila.querySelector("td").textContent.toLowerCase();
             fila.style.display = nombre.includes(texto) ? "" : "none";
+        });
+    }
+
+    function pintar(idx) {
+        cuerpo.innerHTML = "";
+        proveedores[idx].forEach((p) => {
+            const tr = document.createElement("tr");
+            const nombre = document.createElement("td");
+            nombre.textContent = p.Proveedor;
+            const costo = document.createElement("td");
+            costo.textContent = "$" + p.costo;
+            const unidades = document.createElement("td");
+            unidades.textContent = p.unidades;
+            tr.append(nombre, costo, unidades);
+            cuerpo.appendChild(tr);
+        });
+        filtrar();
+    }
+
+    buscador.addEventListener("input", filtrar);
+
+    document.querySelectorAll(".card-modelo").forEach((card) => {
+        card.addEventListener("click", () => {
+            document.querySelectorAll(".card-modelo").forEach((c) => c.classList.remove("activa"));
+            card.classList.add("activa");
+            modeloActivo.textContent = card.querySelector("h2").textContent;
+            pintar(Number(card.dataset.idx));
         });
     });
 </script>

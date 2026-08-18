@@ -86,32 +86,38 @@ def generar(request: Request,
 
     df = proc.maestro_consumo
 
-    tarjetas = [
-        {"titulo": "Restando CEDI y PUNTOS",
-         "ult": f"{df['Valorizado Ult Costo'].sum():,.0f}",
-         "prom": f"{df['Valorizado Promedio'].sum():,.0f}",
-         "und": f"{int(df['Cantidad a Pedir'].sum()):,}"},
-        {"titulo": "Solo restando CEDI",
-         "ult": f"{df['Valorizado Ult Costo sin CEDI'].sum():,.0f}",
-         "prom": f"{df['Valorizado Promedio sin CEDI'].sum():,.0f}",
-         "und": f"{int(df['Cantidad a Pedir sin CEDI'].sum()):,}"},
-        {"titulo": "Solo restando PUNTOS",
-         "ult": f"{df['Valorizado Ult Costo sin PUNTOS'].sum():,.0f}",
-         "prom": f"{df['Valorizado Promedio sin PUNTOS'].sum():,.0f}",
-         "und": f"{int(df['Cantidad a Pedir sin PUNTOS'].sum()):,}",}
+    # Cada tarjeta es un modelo distinto con SUS columnas (valorizado y unidades).
+    # Se calcula tanto el resumen (tarjeta) como la tabla de proveedores de cada uno,
+    # para que al hacer clic en una tarjeta la tabla muestre ese modelo.
+    modelos = [
+        ("Restando CEDI y PUNTOS", "Valorizado Ult Costo",           "Valorizado Promedio",           "Cantidad a Pedir"),
+        ("Solo restando CEDI",     "Valorizado Ult Costo sin CEDI",  "Valorizado Promedio sin CEDI",  "Cantidad a Pedir sin CEDI"),
+        ("Solo restando PUNTOS",   "Valorizado Ult Costo sin PUNTOS","Valorizado Promedio sin PUNTOS","Cantidad a Pedir sin PUNTOS"),
     ]
-    top = (df.groupby("Proveedor")
-           .agg(costo=("Valorizado Ult Costo", "sum"),
-                unidades=("Cantidad a Pedir", "sum"),)
-           .sort_values("costo", ascending=False))
-    top15 = [{"Proveedor": prov,
-              "costo": f"{fila.costo:,.0f}",
-              "unidades": f"{int(fila.unidades):,}"}
-             for prov, fila in top.iterrows()]
+
+    tarjetas = []
+    proveedores = []   # una tabla de proveedores por modelo, en el mismo orden que las tarjetas
+    for titulo, col_ult, col_prom, col_und in modelos:
+        tarjetas.append({
+            "titulo": titulo,
+            "ult": f"{df[col_ult].sum():,.0f}",
+            "prom": f"{df[col_prom].sum():,.0f}",
+            "und": f"{int(df[col_und].sum()):,}",
+        })
+        top = (df.groupby("Proveedor")
+               .agg(costo=(col_ult, "sum"), unidades=(col_und, "sum"))
+               .sort_values("costo", ascending=False))
+        top = top[top["costo"] > 0]   # ocultar proveedores sin compra en este modelo
+        proveedores.append([
+            {"Proveedor": prov,
+             "costo": f"{fila.costo:,.0f}",
+             "unidades": f"{int(fila.unidades):,}"}
+            for prov, fila in top.iterrows()
+        ])
 
     return templates.TemplateResponse(request, "resultado.html", {
         "tarjetas": tarjetas,
-        "top15": top15,
+        "proveedores": proveedores,
         "download_id": download_id,
     })
 
