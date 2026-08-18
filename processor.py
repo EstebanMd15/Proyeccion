@@ -105,6 +105,7 @@ class ProyeccionProcessor:
         self.stock_puntos['Codigo Articulo'] = self.stock_puntos['Codigo Articulo'].astype(str).str.strip()
         self.molecula_compra['Codigo Articulo'] = self.molecula_compra['Codigo Articulo'].astype(str).str.strip()
 
+
         # Renombrado de columnas
         self.molecula_compra.rename(columns={'Codigo Articulo': 'Codigo', 'Codigo Molecula': 'Codigo_Molecula'},
                                     inplace=True)
@@ -116,9 +117,13 @@ class ProyeccionProcessor:
                                          inplace=True)
         self.consumo_remisiones.rename(columns={'CODIGO': 'Codigo', 'CONSUMO_TOTAL_GENERAL': 'Consumo_Remisiones'},
                                        inplace=True)
+        self.molecula_compra.rename(columns={'Descripcion Molecula': 'Molecula'}, inplace=True)
 
         # Desduplicar catálogo maestro
         self.maestro = self.maestro.drop_duplicates(subset=['Codigo'], keep='first')
+
+        # Desduplicar moléculas (el reporte nuevo trae una fila por bodega)
+        self.molecula_compra = self.molecula_compra.drop_duplicates(subset=['Codigo'], keep='first')
 
         # Excluir codigos que no son productos reales
         self.excluir_codigos()
