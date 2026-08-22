@@ -482,6 +482,26 @@ class ProyeccionProcessor:
         costo = ultimo.where(ultimo > 0, prom)
         return (cantidad * costo).round(2)
 
+    @staticmethod
+    def redondear_por_empaque(cantidad, pastillas, rotacion):
+        unidades = pd.to_numeric(cantidad, errors='coerce').fillna(0).to_numpy(dtype='float64')
+        cantPas = pd.to_numeric(pastillas, errors='coerce').fillna(0).to_numpy(dtype='float64')
+        rot = rotacion.astype(str).to_numpy()
+
+        sin_empaque = cantPas < 2
+        uni_seguro = np.where(sin_empaque,1.0, cantPas)
+
+        piso = np.floor(unidades / uni_seguro) * uni_seguro
+        techo = np.ceil(unidades / uni_seguro) * uni_seguro
+        resto = unidades - piso
+
+        hacia_arriba = np.isin(rot, ['A', 'M'])
+        baja = resto < (uni_seguro / 2.0)
+
+        res = np.where(hacia_arriba, techo, np.where(baja, piso, techo))
+        res = np.where(sin_empaque, unidades, res)
+        return res.round().astype('int64')
+
     def pedido_por_canal(self, df):
         """
         Calcula el pedido separando los DOS canales, porque tienen stock distinto:
@@ -571,6 +591,19 @@ class ProyeccionProcessor:
         df['Total Sobrantes'] = np.ceil(np.minimum(objetivo_disp, df['Stock_Total']) +
                                    np.minimum(objetivo_remi, bodega_sobrante_1) - df['Stock_Total']).astype('int64')
 
+        # Sobrantes por escenario: netean contra el MISMO stock que usa el pedido
+        # de cada hoja (positivo = falta; negativo = sobra stock). El Disp/Remi se
+        # reparte con el mismo % del objetivo que usa el pedido de esa hoja.
+        sobra_cedi = df['Necesidad_Mensual'] - df['Stock_Bodega_Principal']
+        df['Sobrantes Disp sin CEDI'] = np.ceil(porcentaje_disp1 * sobra_cedi).astype('int64')
+        df['Sobrantes Remi sin CEDI'] = np.ceil(porcentaje_remi1 * sobra_cedi).astype('int64')
+        df['Total Sobrantes sin CEDI'] = np.ceil(sobra_cedi).astype('int64')
+
+        sobra_pts = df['Necesidad_Mensual'] - puntos
+        df['Sobrantes Disp sin PUNTOS'] = np.ceil(porcentaje_disp * sobra_pts).astype('int64')
+        df['Sobrantes Remi sin PUNTOS'] = np.ceil(porcentaje_remi * sobra_pts).astype('int64')
+        df['Total Sobrantes sin PUNTOS'] = np.ceil(sobra_pts).astype('int64')
+
         #Columna 2: Remi primero -> Dispensacion toma el restante
         bodega_sobrante_2 = (df['Stock_Bodega_Principal'] - objetivo_remi).clip(lower=0)
         pedir_disp_2 = np.ceil((objetivo_disp -(puntos + bodega_sobrante_2)).clip(lower=0))
@@ -642,6 +675,66 @@ class ProyeccionProcessor:
 
         self.pedido_molecula = mol
 
+    def aplicar_redondeo_empaque(self):
+        df = self.maestro_consumo
+        cantPas = df['Cant. Pastillas']
+
+        variantes = [
+            {  # hoja TODO (vigente)
+                'segmentos':  ['Pedir_NEPS_Capita', 'Pedir_NEPS_Evento', 'Pedir_FOMAG_Evento'],
+                'disp_total': 'Pedir_Dispensacion_Total',
+                'remi':       'Pedir_Remisiones',
+                'total':      'Cantidad a Pedir',
+                'val_ult':    'Valorizado Ult Costo',
+                'val_prom':   'Valorizado Promedio',
+            },
+            {  # hoja TODO REST CEDI
+                'segmentos':  ['Pedir_NEPS_Capita sin CEDI', 'Pedir_NEPS_Evento sin CEDI', 'Pedir_FOMAG_Evento sin CEDI'],
+                'disp_total': 'Pedir Dispensacion Total sin CEDI',
+                'remi':       'Pedir Remisiones sin CEDI',
+                'total':      'Cantidad a Pedir sin CEDI',
+                'val_ult':    'Valorizado Ult Costo sin CEDI',
+                'val_prom':   'Valorizado Promedio sin CEDI',
+            },
+            {  # hoja TODO REST PUNTOS
+                'segmentos':  ['Pedir_NEPS_Capita sin PUNTOS', 'Pedir_NEPS_Evento sin PUNTOS', 'Pedir_FOMAG_Evento sin PUNTOS'],
+                'disp_total': 'Pedir Dispensacion Total sin PUNTOS',
+                'remi':       'Pedir Remisiones sin PUNTOS',
+                'total':      'Cantidad a Pedir sin PUNTOS',
+                'val_ult':    'Valorizado Ult Costo sin PUNTOS',
+                'val_prom':   'Valorizado Promedio sin PUNTOS',
+            },
+        ]
+
+        for v in variantes:
+            # Dispensacion (segmentos + total de dispensacion) -> Rotacion_Dispensacion
+            for col in v['segmentos'] + [v['disp_total']]:
+                if col in df.columns:
+                    df[col] = self.redondear_por_empaque(df[col], cantPas, df['Rotacion_Dispensacion'])
+
+            # Remisiones -> Rotacion_Remisiones
+            if v['remi'] in df.columns:
+                df[v['remi']] = self.redondear_por_empaque(df[v['remi']], cantPas, df['Rotacion_Remisiones'])
+
+            # Total = suma de las dos componentes ya redondeadas
+            df[v['total']] = (df[v['disp_total']] + df[v['remi']]).astype('int64')
+
+            # Revalorizar sobre el total redondeado
+            df[v['val_ult']]  = self._valorizar(df[v['total']], df.get('Ultimo Costo'), df.get('Ultimo Costo'))
+            df[v['val_prom']] = self._valorizar(df[v['total']], df.get('Costo Promedio'), df.get('Costo Promedio'))
+
+        for col in ['Demanda_Disp_Mensual', 'Necesidad_Disp']:
+            if col in df.columns:
+                df[col] = self.redondear_por_empaque((df[col]), cantPas, df['Rotacion_Dispensacion'])
+        for col in ['Demanda_Rem_Mensual', 'Necesidad_Rem']:
+            if col in df.columns:
+                df[col] = self.redondear_por_empaque(df[col], cantPas, df['Rotacion_Remisiones'])
+        df['Demanda_Mensual'] = (df['Demanda_Disp_Mensual'] + df['Demanda_Rem_Mensual']).astype('int64')
+        df['Necesidad_Mensual'] = (df['Necesidad_Disp'] + df['Necesidad_Rem']).astype('int64')
+        
+        df['Estado'] = np.where(df['Cantidad a Pedir'] > 0, 'COMPRAR', 'NO COMPRAR')
+
+
     def procesar(self):
         self.limpiar_datos()
         self.clasificar_segmentos()
@@ -657,6 +750,7 @@ class ProyeccionProcessor:
         self.calcular_rotacion()
         self.calcular_rotacion_por_canal()
         self.calcular_pedido()
+        self.aplicar_redondeo_empaque()
 
 
     def imprimir_resumen_contratos(self):
@@ -821,3 +915,4 @@ class ProyeccionProcessor:
         cols_existentes = [c for c in cols_top if c in top_consumo.columns]
         print(top_consumo[cols_existentes].head(5).to_string(index=False))
         print("=" * 65 + "\n")
+

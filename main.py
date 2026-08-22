@@ -4,6 +4,7 @@ from datetime import date, datetime
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
+import processor
 from config import RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES, RUTA_STOCK_BODEGA, RUTA_STOCK_PUNTOS, RUTA_MOLECULAS
 from processor import ProyeccionProcessor
 
@@ -183,7 +184,7 @@ def construir_hojas(processor):
                 'Rotacion', 'Rotacion_Dispensacion', 'Rotacion_Remisiones','Demanda_Disp_Mensual',
                 'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria',
                 'Necesidad_Disp','Necesidad_Rem','Necesidad_Mensual','Valorizado Promedio Sin Rest Inv','Valorizado Ult Costo Sin Rest Inv', 'Stock_Bodega_Principal',
-                'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp','Sobrantes Remi','Total Sobrantes','Cantidad a Pedir sin CEDI','Estado',
+                'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp sin CEDI','Sobrantes Remi sin CEDI','Total Sobrantes sin CEDI','Cantidad a Pedir sin CEDI','Estado',
                 'Valorizado Promedio sin CEDI','Valorizado Ult Costo sin CEDI','Pedir_NEPS_Capita sin CEDI', 'Pedir_NEPS_Evento sin CEDI','Pedir_FOMAG_Evento sin CEDI',
                 'Pedir Dispensacion Total sin CEDI','Pedir Remisiones sin CEDI']
     hojas['Todo REST CEDI'] = (df[[c for c in colsTodoSinCedi if c in df.columns]]
@@ -197,7 +198,7 @@ def construir_hojas(processor):
                 'Rotacion', 'Rotacion_Dispensacion', 'Rotacion_Remisiones','Demanda_Disp_Mensual',
                 'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria',
                 'Necesidad_Disp','Necesidad_Rem','Necesidad_Mensual','Valorizado Promedio Sin Rest Inv','Valorizado Ult Costo Sin Rest Inv', 'Stock_Bodega_Principal',
-                'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp','Sobrantes Remi','Total Sobrantes','Cantidad a Pedir sin PUNTOS','Estado',
+                'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp sin PUNTOS','Sobrantes Remi sin PUNTOS','Total Sobrantes sin PUNTOS','Cantidad a Pedir sin PUNTOS','Estado',
                 'Valorizado Promedio sin PUNTOS','Valorizado Ult Costo sin PUNTOS','Pedir_NEPS_Capita sin PUNTOS', 'Pedir_NEPS_Evento sin PUNTOS','Pedir_FOMAG_Evento sin PUNTOS',
                 'Pedir Dispensacion Total sin PUNTOS','Pedir Remisiones sin PUNTOS']
     hojas['Todo REST PUNTOS'] = (df[[c for c in colsTodoSinPuntos if c in df.columns]]
@@ -287,6 +288,10 @@ def exportar_excel(processor, ruta=None, buffer=None):
                             celda_estado.fill = color_fila_estado_rojo
                     for c in ['Sobrantes Disp', 'Sobrantes Remi', 'Total Sobrantes']:
                         colorear_encabezados(ws, sub, c, color_celdas_sobrantes)
+                    for c in ['Sobrantes Disp sin CEDI', 'Sobrantes Remi sin CEDI', 'Total Sobrantes sin CEDI']:
+                        colorear_encabezados(ws, sub, c, color_celdas_sobrantes)
+                    for c in ['Sobrantes Disp sin PUNTOS', 'Sobrantes Remi sin PUNTOS', 'Total Sobrantes sin PUNTOS']:
+                        colorear_encabezados(ws, sub, c, color_celdas_sobrantes)
                     for e in ('Estado','Usuario ODC'):
                         colorear_encabezados(ws, sub, e, color_celda_estado)
                     for j in ('Cantidad a Pedir', 'Valorizado Promedio', 'Valorizado Ult Costo'):
@@ -339,6 +344,24 @@ def main():
     processor.auditoria_integridad()
     processor.imprimir_resumen_contratos()
     exportar_excel(processor)
+
+    df = processor.maestro_consumo
+    cantPas = df['Cant. Pastillas']
+
+    a_m_disp = df['Rotacion_Dispensacion'].isin(['A', 'M']) & (cantPas >= 2)
+    malos_disp = df[a_m_disp & (df['Pedir_Dispensacion_Total'] % cantPas != 0)]
+    print('A/M disp fuera del multiplo: ', len(malos_disp))
+
+    a_m_rem = df['Rotacion_Remisiones'].isin(['A', 'M']) & (cantPas >= 2)
+    malos_rem = df[a_m_rem & (df['Pedir_Remisiones'] % cantPas != 0)]
+    print('A/M rem fuera del multiplo: ', len(malos_rem))
+
+    for col, rot in [('Pedir_Dispensacion_Total', 'Rotacion_Dispensacion'),
+                     ('Pedir_Remisiones', 'Rotacion_Remisiones')]:
+        rot_B = (df[rot] == 'B') & (cantPas >= 2)
+
+        fuera = df[rot_B & (df[col] % cantPas != 0)]
+        print(f'B {col} fuera del multiplo: ', len(fuera))
 
 
 if __name__ == '__main__':
