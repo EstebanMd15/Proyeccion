@@ -723,15 +723,6 @@ class ProyeccionProcessor:
             df[v['val_ult']]  = self._valorizar(df[v['total']], df.get('Ultimo Costo'), df.get('Ultimo Costo'))
             df[v['val_prom']] = self._valorizar(df[v['total']], df.get('Costo Promedio'), df.get('Costo Promedio'))
 
-        for col in ['Demanda_Disp_Mensual', 'Necesidad_Disp']:
-            if col in df.columns:
-                df[col] = self.redondear_por_empaque((df[col]), cantPas, df['Rotacion_Dispensacion'])
-        for col in ['Demanda_Rem_Mensual', 'Necesidad_Rem']:
-            if col in df.columns:
-                df[col] = self.redondear_por_empaque(df[col], cantPas, df['Rotacion_Remisiones'])
-        df['Demanda_Mensual'] = (df['Demanda_Disp_Mensual'] + df['Demanda_Rem_Mensual']).astype('int64')
-        df['Necesidad_Mensual'] = (df['Necesidad_Disp'] + df['Necesidad_Rem']).astype('int64')
-        
         df['Estado'] = np.where(df['Cantidad a Pedir'] > 0, 'COMPRAR', 'NO COMPRAR')
 
 
