@@ -8,6 +8,8 @@ RUTA_REMISIONES = 'Datos/Remisiones/Rotacion_Remisiones_A_Julio.xlsx'
 RUTA_STOCK_BODEGA = 'Datos/Valorizados/Valorizado_CEDI_21-08-2026.xls'
 RUTA_STOCK_PUNTOS = 'Datos/Valorizado_Puntos/Valorizado_Puntos_21-08-2026.xls'
 RUTA_MOLECULAS = 'Datos/Molecula_Compra/Molecula_Compra_14-08-2026.xlsx'
+RUTA_DISPENSACION_AGO = 'Datos/Dispensacion/Rotacion_Agosto_27.xlsx'
+RUTA_REMISIONES_AGO = 'Datos/Remisiones/Rotacion_Remisiones_Agosto_27.xlsx'
 
 COBERTURA_DIAS_DISP = {'A': 30, 'M': 30, 'B': 18,}
 LEAD_TIME_DIAS_DISP = 6

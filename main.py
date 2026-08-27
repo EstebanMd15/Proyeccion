@@ -1,11 +1,12 @@
 import re
 import pandas as pd
+import os
 from datetime import date, datetime
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
 import processor
-from config import RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES, RUTA_STOCK_BODEGA, RUTA_STOCK_PUNTOS, RUTA_MOLECULAS
+from config import RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES, RUTA_STOCK_BODEGA, RUTA_STOCK_PUNTOS, RUTA_MOLECULAS, RUTA_REMISIONES_AGO, RUTA_DISPENSACION_AGO
 from processor import ProyeccionProcessor
 
 _CHARS_ILEGALES = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F]')
@@ -340,6 +341,11 @@ def main():
 
     processor = ProyeccionProcessor(maestro, consumo_dispensacion, consumo_remisiones, stock_bodega, stock_puntos, molecula_compra)
     processor.procesar()
+
+    if os.path.exists(RUTA_DISPENSACION_AGO) and os.path.exists(RUTA_REMISIONES_AGO):
+        disp_ago = pd.read_excel(RUTA_DISPENSACION_AGO)
+        rem_ago = pd.read_excel(RUTA_REMISIONES_AGO)
+        processor.agregar_consumo_visual(disp_ago, rem_ago, etiqueta_mes='Ago_2026')
 
     processor.auditoria_integridad()
     processor.imprimir_resumen_contratos()

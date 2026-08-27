@@ -725,6 +725,33 @@ class ProyeccionProcessor:
 
         df['Estado'] = np.where(df['Cantidad a Pedir'] > 0, 'COMPRAR', 'NO COMPRAR')
 
+    def agregar_consumo_visual(self, consumo_disp_visual=None, consumo_rem_visual=None,
+                               etiqueta_mes='Ago_2026'):
+        if self.maestro_consumo is None:
+            return
+
+        col_total = f'Consumo_{etiqueta_mes}'
+        self.maestro_consumo[col_total] = 0.0
+
+        fuentes = [
+            (consumo_disp_visual, 'CONSUMO_TOTAL', f'Consumo_Disp_{etiqueta_mes}',
+             'cols_consumo_mensual_disp'),
+            (consumo_rem_visual, 'CONSUMO_TOTAL_GENERAL', f'Consumo_Rem_{etiqueta_mes}',
+             'cols_consumo_mensual_rem'),
+        ]
+        for df_visual, col_valor, nombre_col, lista_attr in fuentes:
+            if df_visual is None or 'CODIGO' not in df_visual.columns or col_valor not in df_visual.columns:
+                continue
+            tmp = df_visual[['CODIGO', col_valor]].copy()
+            tmp['Codigo'] = tmp['CODIGO'].astype(str).str.strip()
+            agg = tmp.groupby('Codigo')[col_valor].sum().rename(nombre_col).reset_index()
+
+            self.maestro_consumo = pd.merge(self.maestro_consumo, agg, on='Codigo', how='left')
+            self.maestro_consumo[nombre_col] = self.maestro_consumo[nombre_col].fillna(0)
+            self.maestro_consumo[col_total] += self.maestro_consumo[nombre_col]
+
+            getattr(self, lista_attr).append(nombre_col)
+        self.cols_consumo_mensual.append(col_total)
 
     def procesar(self):
         self.limpiar_datos()
