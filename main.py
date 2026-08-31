@@ -1,12 +1,11 @@
 import re
 import pandas as pd
-import os
 from datetime import date, datetime
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
 import processor
-from config import RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES, RUTA_STOCK_BODEGA, RUTA_STOCK_PUNTOS, RUTA_MOLECULAS, RUTA_REMISIONES_AGO, RUTA_DISPENSACION_AGO
+from config import RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES, RUTA_STOCK_BODEGA, RUTA_STOCK_PUNTOS, RUTA_MOLECULAS
 from processor import ProyeccionProcessor
 
 _CHARS_ILEGALES = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F]')
@@ -18,7 +17,7 @@ DESCRIPCIONES_COLUMNAS = {
     'Codigo': 'Maestro (BD) - codigo del articulo',
     'Nombre': 'Maestro (BD) - nombre del articulo',
     'Grupo': 'Maestro (BD) - laboratorio',
-    'Proveedor': 'Maestro (BD) - ultimo proveedor de compra',
+    'Nombre Ult Proveedor': 'Maestro (BD) - ultimo proveedor de compra',
     'Ultimo Costo': 'Maestro (BD) - ultimo costo de compra',
     'Costo Promedio': 'Maestro (BD) - costo promedio',
     'Codigo_Molecula': 'Archivo Molecula_Compra - codigo de molecula',
@@ -138,7 +137,7 @@ def construir_hojas(processor):
 
     # ---------------------------------------------------------- DISPENSACION
 
-    colsDisp =['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula','Nombre Comercial', 'Grupo', 'Proveedor',
+    colsDisp =['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula','Categoria','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
             'Costo Promedio', 'Ultimo Costo', 'Consumo_NEPS_Capita','Consumo_NEPS_Evento',
             'Consumo_FOMAG_Evento', 'Consumo_Sin_Clasificar', 'Consumo_Dispensacion_Total',
             *mensuales_disp, 'Demanda_Disp_Mensual', 'Rotacion_Dispensacion', 'Stock_Bodega_Principal',
@@ -153,7 +152,7 @@ def construir_hojas(processor):
     # ------------------------------------------------------------ REMISIONES
     # Remisiones son clientes distintos: el stock de puntos NO les aplica (ni se
     # muestra ni interviene en el pedido). Solo bodega principal.
-    colsRem = ['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula','Nombre Comercial', 'Grupo', 'Proveedor',
+    colsRem = ['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula','Categoria','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
                'Costo Promedio', 'Ultimo Costo', *mensuales_rem, 'Consumo_Remisiones','Demanda_Rem_Mensual',
                'Rotacion_Remisiones','Stock_Bodega_Principal', 'Bodega_Disponible_Comercial', 'Necesidad_Rem','Pedir_Remisiones',
                'Estado', 'Valorizado Ult Costo', 'Valorizado Promedio']
@@ -164,7 +163,7 @@ def construir_hojas(processor):
     hojas['Remisiones'] = rem
 
     # ------------------------------------------------------------------ TODO
-    colsTodo = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Nombre Comercial', 'Grupo', 'Proveedor',
+    colsTodo = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Categoria','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
                 'Costo Promedio', 'Ultimo Costo', 'Consumo_Molecula', 'Consumo_NEPS_Capita',
                 'Consumo_NEPS_Evento', 'Consumo_FOMAG_Evento', 'Consumo_Dispensacion_Total',
                 'Consumo_Remisiones', *mensuales, 'Consumo_Acum',
@@ -178,7 +177,7 @@ def construir_hojas(processor):
                      .sort_values('Cantidad a Pedir', ascending=False))
 
     # -------------------------------------------------------------- TODO SIN CEDI
-    colsTodoSinCedi = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Nombre Comercial', 'Grupo', 'Proveedor',
+    colsTodoSinCedi = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Categoria','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
                 'Costo Promedio', 'Ultimo Costo', 'Consumo_Molecula', 'Consumo_NEPS_Capita',
                 'Consumo_NEPS_Evento', 'Consumo_FOMAG_Evento', 'Consumo_Dispensacion_Total',
                 'Consumo_Remisiones', *mensuales, 'Consumo_Acum',
@@ -190,9 +189,13 @@ def construir_hojas(processor):
                 'Pedir Dispensacion Total sin CEDI','Pedir Remisiones sin CEDI']
     hojas['Todo REST CEDI'] = (df[[c for c in colsTodoSinCedi if c in df.columns]]
                             .sort_values('Cantidad a Pedir sin CEDI', ascending=False)).copy()
+    hojas['Todo REST CEDI']['Estado'] = (
+        hojas['Todo REST CEDI']['Cantidad a Pedir sin CEDI']
+        .gt(0).map({True: 'COMPRAR', False: 'NO COMPRAR'})
+    )
 
     #--------------------------------------------------------------- TODO SIN PUNTOS
-    colsTodoSinPuntos = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Nombre Comercial', 'Grupo', 'Proveedor',
+    colsTodoSinPuntos = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Categoria','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
                 'Costo Promedio', 'Ultimo Costo', 'Consumo_Molecula', 'Consumo_NEPS_Capita',
                 'Consumo_NEPS_Evento', 'Consumo_FOMAG_Evento', 'Consumo_Dispensacion_Total',
                 'Consumo_Remisiones', *mensuales, 'Consumo_Acum',
@@ -203,7 +206,11 @@ def construir_hojas(processor):
                 'Valorizado Promedio sin PUNTOS','Valorizado Ult Costo sin PUNTOS','Pedir_NEPS_Capita sin PUNTOS', 'Pedir_NEPS_Evento sin PUNTOS','Pedir_FOMAG_Evento sin PUNTOS',
                 'Pedir Dispensacion Total sin PUNTOS','Pedir Remisiones sin PUNTOS']
     hojas['Todo REST PUNTOS'] = (df[[c for c in colsTodoSinPuntos if c in df.columns]]
-    )                           .sort_values('Cantidad a Pedir sin PUNTOS', ascending=False).copy()
+                                .sort_values('Cantidad a Pedir sin PUNTOS', ascending=False)).copy()
+    hojas['Todo REST PUNTOS']['Estado'] = (
+        hojas['Todo REST PUNTOS']['Cantidad a Pedir sin PUNTOS']
+        .gt(0).map({True: 'COMPRAR', False: 'NO COMPRAR'})
+    )
 
     # -------------------------------------------------------------- MOLECULA
     cols = ['Codigo_Molecula', 'Molecula','Nombre Comercial', 'N_Productos', 'Rotacion',
@@ -342,17 +349,13 @@ def main():
     processor = ProyeccionProcessor(maestro, consumo_dispensacion, consumo_remisiones, stock_bodega, stock_puntos, molecula_compra)
     processor.procesar()
 
-    if os.path.exists(RUTA_DISPENSACION_AGO) and os.path.exists(RUTA_REMISIONES_AGO):
-        disp_ago = pd.read_excel(RUTA_DISPENSACION_AGO)
-        rem_ago = pd.read_excel(RUTA_REMISIONES_AGO)
-        processor.agregar_consumo_visual(disp_ago, rem_ago, etiqueta_mes='Ago_2026')
 
     processor.auditoria_integridad()
     processor.imprimir_resumen_contratos()
     exportar_excel(processor)
 
     df = processor.maestro_consumo
-    cantPas = df['Cant. Pastillas']
+    cantPas = df['Cantidad Pastillas']
 
     a_m_disp = df['Rotacion_Dispensacion'].isin(['A', 'M']) & (cantPas >= 2)
     malos_disp = df[a_m_disp & (df['Pedir_Dispensacion_Total'] % cantPas != 0)]

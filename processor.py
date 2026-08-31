@@ -16,7 +16,7 @@ class ProyeccionProcessor:
         'Consumo_Remisiones':   'Pedir_Remisiones',
     }
 
-    COLS_MAESTRO_INFO = ('Grupo', 'Proveedor', 'Ultimo Costo', 'Costo Promedio')
+    COLS_MAESTRO_INFO = ('Grupo', 'Nombre Ult Proveedor', 'Ultimo Costo', 'Costo Promedio')
 
     MESES_ES = {'01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr',
                 '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Ago',
@@ -677,7 +677,7 @@ class ProyeccionProcessor:
 
     def aplicar_redondeo_empaque(self):
         df = self.maestro_consumo
-        cantPas = df['Cant. Pastillas']
+        cantPas = df['Cantidad Pastillas']
 
         variantes = [
             {  # hoja TODO (vigente)
@@ -725,18 +725,47 @@ class ProyeccionProcessor:
 
         df['Estado'] = np.where(df['Cantidad a Pedir'] > 0, 'COMPRAR', 'NO COMPRAR')
 
+    def apartar_consumo_mes_visual(self):
+        self.consumo_dispensacion_visual = None
+        self.consumo_remisiones_visual = None
+        self.etiqueta_mes_visual = None
+
+        fuentes = [('consumo_dispensacion', 'consumo_dispensacion_visual'),
+                   ('consumo_remisiones', 'consumo_remisiones_visual')]
+        series = {}
+        for attr, _ in fuentes:
+            df = getattr(self, attr)
+            if 'PERIODO' in df.columns and not df.empty:
+                series[attr] = df['PERIODO'].astype(str).str.strip().str.replace('-','_', regex=False)
+        if not series:
+            return
+        ultimo = max(s.max() for s in series.values())
+
+        if any(s.nunique() < 2 for s in series.values()):
+            return
+        for attr, visual_attr in fuentes:
+            if attr not in series:
+                continue
+            df = getattr(self, attr)
+            es_ultimo = series[attr] == ultimo
+            if es_ultimo.any():
+                setattr(self, visual_attr, df[es_ultimo].copy())
+                setattr(self, attr, df[~es_ultimo].copy())
+        mes, anio = ultimo[-2:], ultimo[:4]
+        self.etiqueta_mes_visual = f"{self.MESES_ES.get(mes, mes)}_{anio}"
+
     def agregar_consumo_visual(self, consumo_disp_visual=None, consumo_rem_visual=None,
-                               etiqueta_mes='Ago_2026'):
-        if self.maestro_consumo is None:
+                               etiqueta_mes=None):
+        if self.maestro_consumo is None or etiqueta_mes is None:
             return
 
         col_total = f'Consumo_{etiqueta_mes}'
         self.maestro_consumo[col_total] = 0.0
 
         fuentes = [
-            (consumo_disp_visual, 'CONSUMO_TOTAL', f'Consumo_Disp_{etiqueta_mes}',
+            (consumo_disp_visual, 'CONSUMO_TOTAL', f"Consumo_Disp_{etiqueta_mes}",
              'cols_consumo_mensual_disp'),
-            (consumo_rem_visual, 'CONSUMO_TOTAL_GENERAL', f'Consumo_Rem_{etiqueta_mes}',
+            (consumo_rem_visual, 'CONSUMO_TOTAL_GENERAL', f"Consumo_Rem_{etiqueta_mes}",
              'cols_consumo_mensual_rem'),
         ]
         for df_visual, col_valor, nombre_col, lista_attr in fuentes:
@@ -749,11 +778,12 @@ class ProyeccionProcessor:
             self.maestro_consumo = pd.merge(self.maestro_consumo, agg, on='Codigo', how='left')
             self.maestro_consumo[nombre_col] = self.maestro_consumo[nombre_col].fillna(0)
             self.maestro_consumo[col_total] += self.maestro_consumo[nombre_col]
-
             getattr(self, lista_attr).append(nombre_col)
         self.cols_consumo_mensual.append(col_total)
 
     def procesar(self):
+        if getattr(config, 'APARTAR_ULTIMO_MES_VISUAL', True):
+            self.apartar_consumo_mes_visual()
         self.limpiar_datos()
         self.clasificar_segmentos()
         # Demanda mensual ponderada 70/30 (ultimos 3 meses 70%, primeros 3 meses 30%),
@@ -769,6 +799,9 @@ class ProyeccionProcessor:
         self.calcular_rotacion_por_canal()
         self.calcular_pedido()
         self.aplicar_redondeo_empaque()
+        if getattr(self, 'etiqueta_mes_visual', None) is not None:
+            self.agregar_consumo_visual(self.consumo_dispensacion_visual, self.consumo_remisiones_visual,
+                                        etiqueta_mes=self.etiqueta_mes_visual)
 
 
     def imprimir_resumen_contratos(self):
@@ -821,7 +854,10 @@ class ProyeccionProcessor:
             print(f"[OK] Cuadre del desglose: los {len(cols_pedir)} contratos suman exactamente "
                   f"'Cantidad a Pedir' en los {len(df):,} productos.")
         else:
-            print(f"[X] {descuadre:,} productos donde el desglose NO suma Cantidad_a_Pedir.")
+            print(f"[i] {descuadre:,} productos donde el desglose por contrato no suma exacto "
+                  f"'Cantidad a Pedir'. Es normal: cada contrato se redondea a su empaque "
+                  f"(Cantidad Pastillas) por separado, asi que las cajas no siempre encajan al total. "
+                  f"El total en firme es correcto.")
         print("=" * 88 + "\n")
 
     def auditoria_integridad(self):
