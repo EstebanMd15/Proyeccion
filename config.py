@@ -1,13 +1,12 @@
-# ==================================================================
-#  RUTAS DE LOS ARCHIVOS DE ENTRADA
-#  Cambia la ruta cuando llegue un archivo nuevo (respeta las comillas).
-# ==================================================================
+import os
+
 RUTA_MAESTRO = 'Datos/Maestras/ListaArticulos_31-08-2026.xls'
 RUTA_DISPENSACION = 'Datos/Dispensacion/ROTACION CON AGOSTO - PRUEBA.xlsx'
 RUTA_REMISIONES = 'Datos/Remisiones/Rotacion_Remisiones_A_Julio.xlsx'
 RUTA_STOCK_BODEGA = 'Datos/Valorizados/Valorizado_CEDI_21-08-2026.xls'
 RUTA_STOCK_PUNTOS = 'Datos/Valorizado_Puntos/Valorizado_Puntos_21-08-2026.xls'
 RUTA_MOLECULAS = 'Datos/Molecula_Compra/Molecula_Compra_14-08-2026.xlsx'
+DB_URL = os.environ.get("PROYECCION_DB_URL")
 
 APARTAR_ULTIMO_MES_VISUAL = True
 
@@ -31,5 +30,5 @@ CRITERIO_ROTACION = 'volumen'
 # --- Codigos que NO son productos y se excluyen de toda la proyeccion.
 #         PREFIJOS = se excluye todo codigo que EMPIECE por alguno de estos.
 #         EXACTOS  = se excluye el codigo completo, tal cual.
-CODIGOS_EXCLUIDOS_PREFIJOS = ('CONT',)
+CODIGOS_EXCLUIDOS_PREFIJOS = ('CONT','PR',)
 CODIGOS_EXCLUIDOS_EXACTOS = ('M99999',)

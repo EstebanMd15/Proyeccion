@@ -7,16 +7,23 @@ from main import cargar_datos, exportar_excel
 from processor import ProyeccionProcessor
 from fastapi.staticfiles import StaticFiles
 import uuid
+import db
+
 app = FastAPI()
 resultados = {}
 MAX_RESULTADOS = 20   # dashboards guardados en memoria; al pasarse se descartan los mas viejos
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-@app.get("/")
-def home(request: Request):
-    return templates.TemplateResponse(request, "index.html")
-
+def _excel_response(df, filename):
+    buffer = io.BytesIO()
+    df.to_excel(buffer, index=False)
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 @app.post("/generar")
 def generar(request: Request,
         maestro: UploadFile | None = File(None),
@@ -50,7 +57,7 @@ def generar(request: Request,
     }
     faltantes = [nombre for nombre, f in archivos.items() if f is None or not f.filename]
     if faltantes:
-        return templates.TemplateResponse(request, "index.html", {
+        return templates.TemplateResponse(request, "proyeccion.html", {
             "error": "Faltan estos archivos: " + ", ".join(faltantes),
         })
     cobertura_dias_DISP = {"A": cob_disp_a, "M": cob_disp_m, "B": cob_disp_b}
@@ -128,7 +135,7 @@ def generar(request: Request,
 def dashboard(request: Request, download_id: str):
     data = resultados.get(download_id)
     if data is None:
-        return templates.TemplateResponse(request, "index.html", {
+        return templates.TemplateResponse(request, "proyeccion.html", {
             "error": "Ese dashboard ya no está disponible (se reinició el servidor). Genera la proyección de nuevo."
         })
     return templates.TemplateResponse(request, "resultado.html", {
@@ -147,3 +154,25 @@ def descargar(download_id: str):
         headers={"Content-Disposition": f'attachment; filename="Proyeccion-{date.today():%Y-%m-%d}.xlsx"'},
 
     )
+
+@app.get("/rotacion/dispensacion")
+def rotacion_dispensacion(desde: str, hasta: str):
+    df = db.consultar_dispensacion(desde, hasta)
+    return _excel_response(df, "Rotacion_Dispensacion.xlsx")
+
+@app.get("/rotacion/remisiones")
+def rotacion_remisiones(desde: str, hasta: str):
+    df = db.consultar_remisiones(desde, hasta)
+    return _excel_response(df, "Rotacion_remisiones.xlsx")
+
+@app.get("/")
+def home(request: Request):
+    return templates.TemplateResponse(request, "home.html")
+
+@app.get("/proyeccion")
+def proyeccion(request: Request):
+    return templates.TemplateResponse(request, "proyeccion.html")
+
+@app.get("/consumos")
+def consumos(request: Request):
+    return templates.TemplateResponse(request, "consumos.html")

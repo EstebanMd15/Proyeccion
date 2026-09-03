@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Consumos · Motor de Compras{% endblock %}
+{% block nav_cons %}activo{% endblock %}
+{% block content %}
+<h1>Consumos</h1>
+<div class="card">
+    <h2>Rotaciones</h2>
+    <label>Desde</label>
+    <input type="month" id="rot_desde">
+    <label>Hasta</label>
+    <input type="month" id="rot_hasta">
+    <div class="row-botones">
+        <button type="button" onclick="descargarRotacion('dispensacion')">Rotación Dispensación</button>
+        <button type="button" onclick="descargarRotacion('remisiones')">Rotación Remisiones</button>
+    </div>
+</div>
+<script>
+    function descargarRotacion(tipo){
+        const d = document.getElementById('rot_desde').value.replace('-','_');
+        const h = document.getElementById('rot_hasta').value.replace('-','_');
+        if (!d || !h){alert('Elige el rango de meses (desde / hasta).'); return; }
+        window.location = `/rotacion/${tipo}?desde=${d}&hasta=${h}`;
+    }
+</script>
+{% endblock %}

@@ -272,3 +272,31 @@ td:nth-child(2), td:nth-child(3) {
     background: none;
     padding: 0;
 }
+
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+padding:14px 0; margin-bottom: 28px; border-bottom: 1px Solid var(--border);}
+
+.topbar .brand{color: var(--muted); text-decoration: none;
+    font-family: 'Cascadia Code', Consolas,monospace; letter-spacing:1px; font-size:14px; }
+.modulos{ display:flex; gap:10px;}
+.modulo{ text-decoration:none; color:var(--text); padding:8px 16px;
+    border:1px solid var(--border); border-radius: 6px; background: var(--panel);
+    letter-spacing:1px; font-size:14px; transition:all .15s; }
+.modulo:hover{ border-color: var(--blue); color:var(--blue); }
+.modulo.activo{ border-color: var(--green); color:var(--green); box-shadow:0 0 12px rgba(63,185,80,.25)}
+
+.hero{ text-align:center; padding:40px 0; }
+.hero-sub{ color:var(--muted); margin-top:-8px;}
+.hero-cards{ display:flex; gap:20px; justify-content: center; margin-top:32px; flex-wrap:wrap; }
+.hero-card{ display:flex; flex-direction: column; gap:8px; text-align:left; width:300px;
+    padding:24px; text-decoration:none; background:var(--panel);
+    border:1px solid var(--border); border-radius:10px; transition:all .15s;}
+.hero-card:hover{ border-color: var(--green); box-shadow:0 0 16px rgba(63,185,80,.2);
+transform:translateY(-2px);}
+.hc-title{ font-family:'Cascadia Code', Consolas,monospace; font-size:20px; letter-spacing:2px;
+color:var(--green); }
+.hc-desc{ color:var(--muted); font-size:14px;}
+.row-botones{display:flex; gap:12px; margin-top:16px; }

@@ -1,10 +1,7 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Motor Proyeccion de Compras</title>
-    <link rel="stylesheet" href="/static/style.css?v=2">
-</head>
+{% extends "base.html" %}
+{% block title %}Proyeccion · Motor de Compras{% endblock %}
+{% block nav_proy %}activo{% endblock %}
+{% block content %}
 <body>
     <h1>Motor Proyección de Compras </h1>
     <div id="error-box" class="error"
@@ -172,4 +169,4 @@
     });
 </script>
 </body>
-</html>
+{% endblock %}

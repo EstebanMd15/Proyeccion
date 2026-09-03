@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %} Motor de Compras{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css?v=3">
+</head>
+<body>
+    <nav class="topbar">
+        <a href="/" class="brand">MOTOR DE COMPRAS</a>
+        <div class="modulos">
+            <a href="/proyeccion" class="modulo {% block nav_proy %}{% endblock %}">PROYECCIÓN</a>
+            <a href="/consumos" class="modulo {% block nav_cons %}{% endblock %}">CONSUMOS</a>
+        </div>
+    </nav>
+    {% block content %}{% endblock %}
+</body>
+</html>
