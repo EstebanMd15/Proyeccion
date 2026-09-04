@@ -176,3 +176,7 @@ def proyeccion(request: Request):
 @app.get("/consumos")
 def consumos(request: Request):
     return templates.TemplateResponse(request, "consumos.html")
+
+@app.get("/rotacion/periodos")
+def rotacion_periodos():
+    return JSONResponse(db.periodos_cargados())

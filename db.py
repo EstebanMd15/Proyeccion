@@ -38,3 +38,9 @@ def consultar_remisiones(desde, hasta):
     desde = desde.replace('_','-')
     hasta = hasta.replace('_','-')
     return pd.read_sql(SQL_REMISIONES, get_engine(), params={'desde': desde, 'hasta': hasta})
+
+def periodos_cargados():
+    eng = get_engine()
+    disp = pd.read_sql(text("SELECT DISTINCT PERIODO FROM DISPENSACION_ACUM ORDER BY PERIODO"),eng)["PERIODO"].astype(str).tolist()
+    rem = pd.read_sql(text("SELECT DISTINCT PERIODO FROM REMISIONES_ACUM ORDER BY PERIODO"), eng)["PERIODO"].astype(str).tolist()
+    return {"dispensacion": disp, "remisiones": rem}

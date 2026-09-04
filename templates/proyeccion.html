@@ -8,40 +8,36 @@
         {% if not error %}style="display: none"{% endif %}>{{ error or ""}}</div>
     <form action="/generar" method="post" enctype="multipart/form-data">
 
-        <div class="card">
-            <h2>Archivos de Entrada</h2>
-
-            <label>Archivo Maestro</label>
-            <div class="dropzone">
-                <input type="file" name="maestro" accept=".xls, .xlsx">
+    <div class="card">
+        <h2>Archivos de Entrada</h2>
+        <div class="archivos-grid">
+            <div class="campo">
+                <label>Archivo Maestro</label>
+                <div class="dropzone"><input type="file" name="maestro" accept=".xls, .xlsx"></div>
             </div>
-
-            <label>Consumo Dispensación</label>
-            <div class="dropzone">
-                <input type="file" name="dispensacion" accept=".xls, .xlsx">
+            <div class="campo">
+                <label>Consumo Dispensación</label>
+                <div class="dropzone"><input type="file" name="dispensacion" accept=".xls, .xlsx"></div>
             </div>
-
-            <label>Consumo Remisiones</label>
-            <div class="dropzone">
-                <input type="file" name="remisiones" accept=".xls, .xlsx">
+            <div class="campo">
+                <label>Consumo Remisiones</label>
+                <div class="dropzone"><input type="file" name="remisiones" accept=".xls, .xlsx"></div>
             </div>
-
-            <label>Valorizado Bodega (CEDI)</label>
-            <div class="dropzone">
-                <input type="file" name="stock_bodega" accept=".xls, .xlsx">
+            <div class="campo">
+                <label>Valorizado Bodega (CEDI)</label>
+                <div class="dropzone"><input type="file" name="stock_bodega" accept=".xls, .xlsx"></div>
             </div>
-
-            <label>Valorizado Puntos</label>
-            <div class="dropzone">
-                <input type="file" name="stock_puntos" accept=".xls, .xlsx">
+            <div class="campo">
+                <label>Valorizado Puntos</label>
+                <div class="dropzone"><input type="file" name="stock_puntos" accept=".xls, .xlsx"></div>
             </div>
-
-            <label>Molécula de Compra</label>
-            <div class="dropzone">
-                <input type="file" name="moleculas" accept=".xls, .xlsx">
+            <div class="campo">
+                <label>Molécula de Compra</label>
+                <div class="dropzone"><input type="file" name="moleculas" accept=".xls, .xlsx"></div>
             </div>
         </div>
-    <div class="row">
+    </div>
+        <div class="row">
         <div class="card">
             <h2>Dispensación</h2>
 

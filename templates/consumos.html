@@ -4,22 +4,85 @@
 {% block content %}
 <h1>Consumos</h1>
 <div class="card">
+    <div id="msg-consumos" class="aviso" style="display:none"></div>
     <h2>Rotaciones</h2>
     <label>Desde</label>
     <input type="month" id="rot_desde">
     <label>Hasta</label>
     <input type="month" id="rot_hasta">
+    <p class="hint" id="hint-periodos">Cargando periodos disponibles</p>
     <div class="row-botones">
         <button type="button" onclick="descargarRotacion('dispensacion')">Rotación Dispensación</button>
         <button type="button" onclick="descargarRotacion('remisiones')">Rotación Remisiones</button>
     </div>
+    <div class="overlay" id="overlay">
+        <div class="spinner"></div>
+        <p>Generando archivo...</p>
+    </div>
 </div>
 <script>
-    function descargarRotacion(tipo){
-        const d = document.getElementById('rot_desde').value.replace('-','_');
-        const h = document.getElementById('rot_hasta').value.replace('-','_');
-        if (!d || !h){alert('Elige el rango de meses (desde / hasta).'); return; }
-        window.location = `/rotacion/${tipo}?desde=${d}&hasta=${h}`;
+let PERIODOS = {dispensacion: [], remisiones: []};
+
+// al abrir: trae periodos y MUESTRA los rangos cargados en el hint
+fetch('/rotacion/periodos').then(r => r.json()).then(p => {
+    PERIODOS = p;
+    const d = p.dispensacion, r = p.remisiones;
+    document.getElementById('hint-periodos').textContent =
+        `Dispensación: ${d[0]||'—'} a ${d[d.length-1]||'—'}   ·   Remisiones: ${r[0]||'—'} a ${r[r.length-1]||'—'}`;
+}).catch(() => {
+    document.getElementById('hint-periodos').textContent = 'No se pudieron cargar los períodos disponibles.';
+});
+
+function mostrarMsg(texto){
+    const box = document.getElementById('msg-consumos');
+    box.textContent = texto;
+    box.style.display = 'block';
+    box.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+}
+
+function mesesEnRango(dv, hv){                       // 'YYYY-MM' -> ['YYYY_MM', ...]
+    const [ay, am] = dv.split('-').map(Number);
+    const [by, bm] = hv.split('-').map(Number);
+    const out = []; let y = ay, m = am;
+    while (y < by || (y === by && m <= bm)){
+        out.push(`${y}_${String(m).padStart(2,'0')}`);
+        if (++m > 12){ m = 1; y++; }
     }
+    return out;
+}
+
+async function descargarRotacion(tipo){
+    document.getElementById('msg-consumos').style.display = 'none';   // limpia mensaje previo
+    const dv = document.getElementById('rot_desde').value;
+    const hv = document.getElementById('rot_hasta').value;
+    if(!dv || !hv){ mostrarMsg('Elige el rango de meses (desde / hasta).'); return; }
+    if(dv > hv){ mostrarMsg('El "Desde" no puede ser mayor que el "Hasta".'); return; }
+
+    const cargados = (PERIODOS[tipo] || []).map(p => p.replace('-', '_'));
+    const pedidos  = mesesEnRango(dv, hv);
+    const faltantes = cargados.length ? pedidos.filter(m => !cargados.includes(m)) : [];
+    if(faltantes.length){
+        mostrarMsg('No están cargados estos períodos: ' + faltantes.join(', ') +
+                   '\nPeríodos cargados: ' + cargados[0] + ' a ' + cargados[cargados.length - 1]);
+        return;   // BLOQUEA
+    }
+
+    const d = dv.replace('-', '_'), h = hv.replace('-', '_');
+    const overlay = document.getElementById('overlay');
+    overlay.style.display = 'flex';
+    try {
+        const resp = await fetch(`/rotacion/${tipo}?desde=${d}&hasta=${h}`);
+        if(!resp.ok) throw new Error('fallo');
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `Rotacion_${tipo}.xlsx`;
+        a.click(); URL.revokeObjectURL(url);
+    } catch(e){
+        mostrarMsg('Hubo un error al generar el archivo.');
+    } finally {
+        overlay.style.display = 'none';
+    }
+}
 </script>
 {% endblock %}
