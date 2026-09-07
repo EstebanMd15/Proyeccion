@@ -781,10 +781,28 @@ class ProyeccionProcessor:
             getattr(self, lista_attr).append(nombre_col)
         self.cols_consumo_mensual.append(col_total)
 
+    def _validar_datos(self):
+        """Mensajes claros cuando los archivos cargados no sirven para el calculo."""
+        disp, rem = self.consumo_dispensacion, self.consumo_remisiones
+        faltan = [c for c in ['Consumo_Dispensacion', 'SIGLA_COMERCIAL_CLIENTE', 'TIPO_SERVICIO', 'PERIODO']
+                  if c not in disp.columns]
+        if faltan:
+            raise ValueError("El archivo de Dispensación no tiene las columnas necesarias ("
+                             + ", ".join(faltan) + "). Verifica que sea el archivo correcto.")
+        if 'Consumo_Remisiones' not in rem.columns or 'PERIODO' not in rem.columns:
+            raise ValueError("El archivo de Remisiones no tiene la columna CONSUMO_TOTAL_GENERAL o PERIODO. "
+                             "Verifica que sea el archivo correcto.")
+        nd, nr = disp['PERIODO'].nunique(), rem['PERIODO'].nunique()
+        if nd < 3 or nr < 3:
+            raise ValueError(f"No hay suficientes meses en comun entre Dispensacion ({nd}) y Remisiones ({nr}); "
+                             "se necesitan al menos 3. Descarga ambas rotaciones con el mismo rango y con 4+ meses "
+                             "dentro de 2026 (Remisiones en la base arranca en enero 2026).")
+
     def procesar(self):
         if getattr(config, 'APARTAR_ULTIMO_MES_VISUAL', True):
             self.apartar_consumo_mes_visual()
         self.limpiar_datos()
+        self._validar_datos()
         self.clasificar_segmentos()
         # Demanda mensual ponderada 70/30 (ultimos 3 meses 70%, primeros 3 meses 30%),
         # calculada por canal porque cada uno alimenta su propio pedido.

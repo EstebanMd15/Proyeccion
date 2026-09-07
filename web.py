@@ -62,25 +62,31 @@ def generar(request: Request,
         })
     cobertura_dias_DISP = {"A": cob_disp_a, "M": cob_disp_m, "B": cob_disp_b}
     cobertura_dias_REM = {"A": cob_rem_a, "M": cob_rem_m, "B": cob_rem_b}
-    datos = cargar_datos(
-        maestro.file, dispensacion.file, remisiones.file, stock_bodega.file,
-        stock_puntos.file, moleculas.file,
-    )
-    proc = ProyeccionProcessor(
-        *datos,
-        cobertura_dias_DISP=cobertura_dias_DISP,
-        lead_time_dias_DISP=lead_disp,
-        dias_seguridad_DISP=seg_disp,
-        cobertura_dias_REMI=cobertura_dias_REM,
-        lead_time_dias_REMI=lead_rem,
-        dias_seguridad_REMI=seg_rem,
-        umbral_A=umbral_a,
-        umbral_M=umbral_m,
-    )
-    proc.procesar()
-
-    buffer = io.BytesIO()
-    exportar_excel(proc, buffer=buffer)
+    try:
+        datos = cargar_datos(
+            maestro.file, dispensacion.file, remisiones.file, stock_bodega.file,
+            stock_puntos.file, moleculas.file,
+        )
+        proc = ProyeccionProcessor(
+            *datos,
+            cobertura_dias_DISP=cobertura_dias_DISP,
+            lead_time_dias_DISP=lead_disp,
+            dias_seguridad_DISP=seg_disp,
+            cobertura_dias_REMI=cobertura_dias_REM,
+            lead_time_dias_REMI=lead_rem,
+            dias_seguridad_REMI=seg_rem,
+            umbral_A=umbral_a,
+            umbral_M=umbral_m,
+        )
+        proc.procesar()
+        buffer = io.BytesIO()
+        exportar_excel(proc, buffer=buffer)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"error": "No se pudo generar la proyeccion. Revisa que los archivos sean "
+                                      "correctos y con el mismo rango de meses. (" + str(e) + ")"},
+                            status_code=400)
 
     if accion == "descargar":
         return StreamingResponse(
@@ -110,7 +116,7 @@ def generar(request: Request,
             "prom": f"{df[col_prom].sum():,.0f}",
             "und": f"{int(df[col_und].sum()):,}",
         })
-        top = (df.groupby("Proveedor")
+        top = (df.groupby("Nombre Ult Proveedor")
                .agg(costo=(col_ult, "sum"), unidades=(col_und, "sum"))
                .sort_values("costo", ascending=False))
         top = top[top["costo"] > 0]   # ocultar proveedores sin compra en este modelo

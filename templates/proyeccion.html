@@ -115,16 +115,27 @@
         if (e.submitter.value === "dashboard"){
             e.preventDefault();
             const win = window.open("","_blank");
-            win.document.write('<link rel="stylesheet" href="/static/style.css?v=2"><div class="overlay" style="display:flex"><div' +
+            win.document.write('<link rel="stylesheet" href="/static/style.css?v=4"><div class="overlay" style="display:flex"><div' +
                 ' class="spinner"></div><p>Generando Dashboard...</p></div>');
-
-            const fd = new FormData(form);
-            fd.append("accion", "dashboard");
-            const resp = await fetch("/generar", {method: "POST", body: fd});
-            const datos = await resp.json();
-
-            win.location = "/dashboard/" + datos.id;
-
+            try {
+                const fd = new FormData(form);
+                fd.append("accion", "dashboard");
+                const resp = await fetch("/generar", {method: "POST", body: fd});
+                if (!resp.ok){
+                    let m = "Error " + resp.status;
+                    try { const j = await resp.json(); if (j.error) m = j.error; } catch(_){}
+                    throw new Error(m);
+                }
+                const datos = await resp.json();
+                if (!datos.id) throw new Error("Respuesta sin id de dashboard");
+                win.location = "/dashboard/" + datos.id;
+            } catch (err){
+                win.document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;color:#f85149">' +
+                    'No se pudo generar el dashboard.<br>' + err.message + '</div>';
+                errorBox.textContent = " No se pudo generar el dashboard. Revisa el servidor e intenta de nuevo.";
+                errorBox.style.display = "block";
+                errorBox.scrollIntoView({ behavior: "smooth", block: "start"});
+            }
             return;
         }
         e.preventDefault();
@@ -136,7 +147,11 @@
             const fd = new FormData(form);
             fd.append("accion", "descargar");
             const resp = await fetch("/generar", {method: "POST", body: fd});
-            if (!resp.ok) throw new Error("fallo");
+            if (!resp.ok){
+                let m = "Hubo un error al generar la proyección.";
+                try { const j = await resp.json(); if (j.error) m = j.error; } catch(_){}
+                throw new Error(m);
+            }
             const blob = await resp.blob();
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -145,7 +160,9 @@
             a.click();
             URL.revokeObjectURL(url);
         } catch (err){
-            alert("Hubo un error al generar la proyección.");
+            errorBox.textContent = " " + err.message;
+            errorBox.style.display = "block";
+            errorBox.scrollIntoView({ behavior: "smooth", block: "start"});
         } finally {
             overlay.style.display = "none";
         }
