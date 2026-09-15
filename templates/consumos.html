@@ -85,7 +85,8 @@ function mesesEnRango(dv, hv){                       // 'YYYY-MM' -> ['YYYY_MM',
     return out;
 }
 
-async function descargarRotacion(tipo){
+async function descargarRotacion(){
+    const tipo = document.getElementById('rot_tipo').value;
     document.getElementById('msg-consumos').style.display = 'none';   // limpia mensaje previo
     const dv = document.getElementById('rot_desde').value;
     const hv = document.getElementById('rot_hasta').value;
