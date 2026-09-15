@@ -5,15 +5,19 @@
 <h1>Consumos</h1>
 <div class="card">
     <div id="msg-consumos" class="aviso" style="display:none"></div>
-    <h2>Rotaciones</h2>
+    <label>Rotación</label>
+    <select id="rot_tipo">
+        <option value="dispensacion">Dispensación</option>
+        <option value="remisiones">Remisiones</option>
+    </select>
     <label>Desde</label>
     <select id="rot_desde"></select>
     <label>Hasta</label>
     <select id="rot_hasta"></select>
     <p class="hint" id="hint-periodos">Cargando periodos disponibles</p>
+
     <div class="row-botones">
-        <button type="button" onclick="descargarRotacion('dispensacion')">Rotación Dispensación</button>
-        <button type="button" onclick="descargarRotacion('remisiones')">Rotación Remisiones</button>
+        <button type="button" onclick="descargarRotacion()">Descargar rotación</button>
     </div>
     <div class="overlay" id="overlay">
         <div class="spinner"></div>
@@ -30,17 +34,22 @@ let PERIODOS = {dispensacion: [], remisiones: []};
 // al abrir: trae periodos y MUESTRA los rangos cargados en el hint
 fetch('/rotacion/periodos').then(r => r.json()).then(p => {
     PERIODOS = p;
-    const universo = [...new Set([
-        ...(p.dispensacion || []),
-        ...(p.remisiones || []).map(x => x.replace('-','_'))
-    ])].sort();
-    llenarSelect(document.getElementById('rot_desde'), universo, universo[0]);
-    llenarSelect(document.getElementById('rot_hasta'), universo, universo[universo.length - 1]);
-    document.getElementById('hint-periodos').textContent = 'Nota: Remisiones solo cuenta con periodos desde enero 2026.'
-
+    poblarPorTipo(document.getElementById('rot_tipo').value);
 }).catch(() => {
     document.getElementById('hint-periodos').textContent = 'No se pudieron cargar los períodos disponibles.';
 });
+
+function poblarPorTipo(tipo){
+    const periodos = (PERIODOS[tipo] || []).map(x => x.replace('-', '_')).sort();
+    llenarSelect(document.getElementById('rot_desde'), periodos, periodos[0]);
+    llenarSelect(document.getElementById('rot_hasta'), periodos, periodos[periodos.length - 1]);
+    const nombre = (tipo === 'remisiones') ? 'Remisiones' : 'Dispensación';
+    document.getElementById('hint-periodos').textContent = periodos.length ? `${nombre}: ${etiquetaPeriodo(periodos[0])} a
+    ${etiquetaPeriodo(periodos[periodos.length - 1])}` : 'Sin periodos disponibles para esta rotación.';
+}
+
+// Al cambiar la rotación repoblar los meses
+document.getElementById('rot_tipo').addEventListener('change', e => poblarPorTipo(e.target.value));
 
 function etiquetaPeriodo(p){
     const s = p.replace("-","_");
@@ -83,20 +92,10 @@ async function descargarRotacion(tipo){
     if(!dv || !hv){ mostrarMsg('Elige el rango de meses (desde / hasta).'); return; }
     if(dv > hv){ mostrarMsg('El "Desde" no puede ser mayor que el "Hasta".'); return; }
 
-    const cargados = (PERIODOS[tipo] || []).map(p => p.replace('-', '_'));
-    const pedidos  = mesesEnRango(dv, hv);
-    const faltantes = cargados.length ? pedidos.filter(m => !cargados.includes(m)) : [];
-    if(faltantes.length){
-        mostrarMsg('No están cargados estos períodos: ' + faltantes.join(', ') +
-                   '\nPeríodos cargados: ' + cargados[0] + ' a ' + cargados[cargados.length - 1]);
-        return;   // BLOQUEA
-    }
-
-    const d = dv.replace('-', '_'), h = hv.replace('-', '_');
     const overlay = document.getElementById('overlay');
     overlay.style.display = 'flex';
     try {
-        const resp = await fetch(`/rotacion/${tipo}?desde=${d}&hasta=${h}`);
+        const resp = await fetch(`/rotacion/${tipo}?desde=${dv}&hasta=${hv}`);
         if(!resp.ok) throw new Error('fallo');
         const blob = await resp.blob();
         const url = URL.createObjectURL(blob);
