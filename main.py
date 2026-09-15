@@ -5,7 +5,8 @@ from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
 import processor
-from config import RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES, RUTA_STOCK_BODEGA, RUTA_STOCK_PUNTOS, RUTA_MOLECULAS
+from config import RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES, RUTA_STOCK_BODEGA, RUTA_STOCK_PUNTOS, \
+    RUTA_MOLECULAS, TEXTO_MATRIZ, CODIGOS_MATRIZ_RIESGO
 from processor import ProyeccionProcessor
 
 _CHARS_ILEGALES = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F]')
@@ -126,6 +127,8 @@ def _valorizar_estado(sub, col_cantidad):
 def construir_hojas(processor):
 
     df = processor.maestro_consumo
+    codigo_com = {str(c).strip() for c in CODIGOS_MATRIZ_RIESGO}
+    df['Comentario'] = (df['Codigo'].astype(str).str.strip().isin(codigo_com).map({True: TEXTO_MATRIZ, False: ''}))
     mensuales = list(getattr(processor, 'cols_consumo_mensual', []))
     mensuales_disp = list(getattr(processor, 'cols_consumo_mensual_disp', []))
     mensuales_rem = list(getattr(processor, 'cols_consumo_mensual_rem', []))
@@ -170,7 +173,7 @@ def construir_hojas(processor):
                 'Rotacion', 'Rotacion_Dispensacion', 'Rotacion_Remisiones','Demanda_Disp_Mensual',
                 'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria',
                 'Necesidad_Disp','Necesidad_Rem','Necesidad_Mensual','Valorizado Promedio Sin Rest Inv','Valorizado Ult Costo Sin Rest Inv', 'Stock_Bodega_Principal',
-                'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp','Sobrantes Remi','Total Sobrantes','Cantidad a Pedir','Estado',
+                'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp','Sobrantes Remi','Total Sobrantes','Cantidad a Pedir','Estado','Comentario',
                 'Valorizado Promedio','Valorizado Ult Costo','Pedir_NEPS_Capita', 'Pedir_NEPS_Evento','Pedir_FOMAG_Evento',
                 'Pedir_Dispensacion_Total','Pedir_Remisiones']
     hojas['Todo'] = (df[[c for c in colsTodo if c in df.columns]]
@@ -184,7 +187,7 @@ def construir_hojas(processor):
                 'Rotacion', 'Rotacion_Dispensacion', 'Rotacion_Remisiones','Demanda_Disp_Mensual',
                 'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria',
                 'Necesidad_Disp','Necesidad_Rem','Necesidad_Mensual','Valorizado Promedio Sin Rest Inv','Valorizado Ult Costo Sin Rest Inv', 'Stock_Bodega_Principal',
-                'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp sin CEDI','Sobrantes Remi sin CEDI','Total Sobrantes sin CEDI','Cantidad a Pedir sin CEDI','Estado',
+                'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp sin CEDI','Sobrantes Remi sin CEDI','Total Sobrantes sin CEDI','Cantidad a Pedir sin CEDI','Estado','Comentario',
                 'Valorizado Promedio sin CEDI','Valorizado Ult Costo sin CEDI','Pedir_NEPS_Capita sin CEDI', 'Pedir_NEPS_Evento sin CEDI','Pedir_FOMAG_Evento sin CEDI',
                 'Pedir Dispensacion Total sin CEDI','Pedir Remisiones sin CEDI']
     hojas['Todo REST CEDI'] = (df[[c for c in colsTodoSinCedi if c in df.columns]]
@@ -202,7 +205,7 @@ def construir_hojas(processor):
                 'Rotacion', 'Rotacion_Dispensacion', 'Rotacion_Remisiones','Demanda_Disp_Mensual',
                 'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria',
                 'Necesidad_Disp','Necesidad_Rem','Necesidad_Mensual','Valorizado Promedio Sin Rest Inv','Valorizado Ult Costo Sin Rest Inv', 'Stock_Bodega_Principal',
-                'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp sin PUNTOS','Sobrantes Remi sin PUNTOS','Total Sobrantes sin PUNTOS','Cantidad a Pedir sin PUNTOS','Estado',
+                'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp sin PUNTOS','Sobrantes Remi sin PUNTOS','Total Sobrantes sin PUNTOS','Cantidad a Pedir sin PUNTOS','Estado','Comentario',
                 'Valorizado Promedio sin PUNTOS','Valorizado Ult Costo sin PUNTOS','Pedir_NEPS_Capita sin PUNTOS', 'Pedir_NEPS_Evento sin PUNTOS','Pedir_FOMAG_Evento sin PUNTOS',
                 'Pedir Dispensacion Total sin PUNTOS','Pedir Remisiones sin PUNTOS']
     hojas['Todo REST PUNTOS'] = (df[[c for c in colsTodoSinPuntos if c in df.columns]]
