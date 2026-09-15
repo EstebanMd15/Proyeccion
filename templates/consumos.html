@@ -7,9 +7,9 @@
     <div id="msg-consumos" class="aviso" style="display:none"></div>
     <h2>Rotaciones</h2>
     <label>Desde</label>
-    <input type="month" id="rot_desde">
+    <select id="rot_desde"></select>
     <label>Hasta</label>
-    <input type="month" id="rot_hasta">
+    <select id="rot_hasta"></select>
     <p class="hint" id="hint-periodos">Cargando periodos disponibles</p>
     <div class="row-botones">
         <button type="button" onclick="descargarRotacion('dispensacion')">Rotación Dispensación</button>
@@ -21,17 +21,42 @@
     </div>
 </div>
 <script>
+
+const MESES = {'01':'Ene', '02':'Feb', '03':'Mar', '04':'Abr', '05':'May', '06':'Jun',
+               '07':'Jul', '08':'Ago', '09':'Sep', '10':'Oct', '11':'Nov', '12':'Dic'};
+
 let PERIODOS = {dispensacion: [], remisiones: []};
 
 // al abrir: trae periodos y MUESTRA los rangos cargados en el hint
 fetch('/rotacion/periodos').then(r => r.json()).then(p => {
     PERIODOS = p;
-    const d = p.dispensacion, r = p.remisiones;
-    document.getElementById('hint-periodos').textContent =
-        `Dispensación: ${d[0]||'—'} a ${d[d.length-1]||'—'}   ·   Remisiones: ${r[0]||'—'} a ${r[r.length-1]||'—'}`;
+    const universo = [...new Set([
+        ...(p.dispensacion || []),
+        ...(p.remisiones || []).map(x => x.replace('-','_'))
+    ])].sort();
+    llenarSelect(document.getElementById('rot_desde'), universo, universo[0]);
+    llenarSelect(document.getElementById('rot_hasta'), universo, universo[universo.length - 1]);
+    document.getElementById('hint-periodos').textContent = 'Nota: Remisiones solo cuenta con periodos desde enero 2026.'
+
 }).catch(() => {
     document.getElementById('hint-periodos').textContent = 'No se pudieron cargar los períodos disponibles.';
 });
+
+function etiquetaPeriodo(p){
+    const s = p.replace("-","_");
+    return MESES[s.slice(-2)] + ' ' + s.slice(0,4);
+}
+
+function llenarSelect(sel, periodos, seleccion){
+    sel.innerHTML = '';
+    periodos.forEach(p => {
+        const o = document.createElement('option');
+        o.value = p.replace('-','_');
+        o.textContent = etiquetaPeriodo(p);
+        sel.appendChild(o);
+    });
+    if (seleccion) sel.value = seleccion;
+}
 
 function mostrarMsg(texto){
     const box = document.getElementById('msg-consumos');
@@ -41,8 +66,8 @@ function mostrarMsg(texto){
 }
 
 function mesesEnRango(dv, hv){                       // 'YYYY-MM' -> ['YYYY_MM', ...]
-    const [ay, am] = dv.split('-').map(Number);
-    const [by, bm] = hv.split('-').map(Number);
+    const [ay, am] = dv.split('_').map(Number);
+    const [by, bm] = hv.split('_').map(Number);
     const out = []; let y = ay, m = am;
     while (y < by || (y === by && m <= bm)){
         out.push(`${y}_${String(m).padStart(2,'0')}`);
