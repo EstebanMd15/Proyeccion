@@ -268,7 +268,7 @@ class ProyeccionProcessor:
         cols_numericas = [c for c in cols_a_traer if c != 'Codigo']
         self.maestro_consumo[cols_numericas] = self.maestro_consumo[cols_numericas].fillna(0)
 
-        # Demanda mensual 70/30 por canal (se usa para calcular el pedido)
+        # Demanda mensual 50/30/20 por canal (se usa para calcular el pedido)
         disp = self.demanda_disp_mensual.rename(columns={'Consumo_Dispensacion_ponderado': 'Demanda_Disp_Mensual'})
         rem = self.demanda_rem_mensual.rename(columns={'Consumo_Remisiones_ponderado': 'Demanda_Rem_Mensual'})
         self.maestro_consumo = pd.merge(self.maestro_consumo, disp, on='Codigo', how='left')
@@ -804,7 +804,7 @@ class ProyeccionProcessor:
         self.limpiar_datos()
         self._validar_datos()
         self.clasificar_segmentos()
-        # Demanda mensual ponderada 70/30 (ultimos 3 meses 70%, primeros 3 meses 30%),
+        # Demanda mensual ponderada 50/30/20 (ultimos 3 meses),
         # calculada por canal porque cada uno alimenta su propio pedido.
         self.demanda_disp_mensual = self.calcular_ponderados(self.consumo_dispensacion)
         self.demanda_rem_mensual = self.calcular_ponderados(

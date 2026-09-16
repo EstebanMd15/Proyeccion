@@ -43,9 +43,9 @@ DESCRIPCIONES_COLUMNAS = {
     'Stock_Total': 'Calculado - Stock_Bodega_Principal + Stock_Puntos_Dispensacion',
     'Bodega_Disponible_Comercial': 'Calculado - bodega (CEDI) que le queda a comercial tras dispensacion. El pedido comercial se resta contra esto: Necesidad_Rem - esto = Pedir_Remisiones',
     # --- motor de pedido ---
-    'Demanda_Mensual': 'Calculado - demanda mensual ponderada 70/30 (ult. 3 meses 70%, primeros 3 meses 30%)',
-    'Demanda_Disp_Mensual': 'Calculado - demanda mensual 70/30 solo del canal dispensacion',
-    'Demanda_Rem_Mensual': 'Calculado - demanda mensual 70/30 solo del canal remisiones',
+    'Demanda_Mensual': 'Calculado - demanda mensual ponderada 50/30/20 (3 meses más recientes: 50% / 30% / 20%)',
+    'Demanda_Disp_Mensual': 'Calculado - demanda mensual ponderada 50/30/20 solo del canal de dispensación',
+    'Demanda_Rem_Mensual': 'Calculado - demanda mensual ponderada 50/30/20 solo del canal remisiones',
     'Demanda_Diaria': 'Calculado - Demanda_Mensual / 30 (consumo promedio por dia)',
     'Cobertura_Dias': 'Parametro (config.py) - dias de cobertura segun la rotacion',
     'Stock_Seguridad': 'Calculado - demanda diaria x dias de seguridad',
@@ -226,6 +226,25 @@ def construir_hojas(processor):
 
     for sub in hojas.values():
         sub['Usuario ODC'] = ''
+
+    p = processor
+    filas_param = [
+        ('Fecha de generación', datetime.now().strftime('%Y-%m-%d %H:%M')),
+        ('Criterio de rotación', p.criterio_rotacion),
+        ('Umbral de rotación A (%)', p.umbral_A),
+        ('Umbral de rotación M (%)', p.umbral_M),
+        ('DISPENSACIÓN - Cobertura A (días)', p.cobertura_dias_DISP.get('A')),
+        ('DISPENSACIÓN - Cobertura M (días)', p.cobertura_dias_DISP.get('M')),
+        ('DISPENSACIÓN - Cobertura B (días)', p.cobertura_dias_DISP.get('B')),
+        ('DISPENSACIÓN - Lead Time (días)', p.lead_time_dias_DISP),
+        ('DISPENSACIÓN - Días de Seguridad', p.dias_seguridad_DISP),
+        ('REMISIONES - Cobertura A (días)', p.cobertura_dias_REMI.get('A')),
+        ('REMISIONES - Cobertura M (días)', p.cobertura_dias_REMI.get('M')),
+        ('REMISIONES - Cobertura B (días)', p.cobertura_dias_REMI.get('B')),
+        ('REMISIONES - Lead Time (días)', p.lead_time_dias_REMI),
+        ('REMISIONES - Días de Seguridad', p.dias_seguridad_REMI),
+    ]
+    hojas['Parametros'] = pd.DataFrame(filas_param, columns=['Parámetro', 'Valor'])
 
     return hojas
 
