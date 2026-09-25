@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Reparto · Motor de Compras{% endblock %}
+{% block nav_reparto %}activo{% endblock %}
+{% block content %}
+<h1>Motor de Abastecimiento (Reparto)</h1>
+<div id="error-box" class="error"
+     {% if not error %}style="display: none"{% endif %}>{{ error or "" }}</div>
+
+<form action="/abastecimiento/reparto" method="post" enctype="multipart/form-data">
+    <div class="card">
+        <h2>Archivos de Entrada</h2>
+        <div class="archivos-grid">
+            <div class="campo">
+                <label>Archivo Maestro</label>
+                <div class="dropzone"><input type="file" name="maestro" accept=".xls, .xlsx"></div>
+            </div>
+            <div class="campo">
+                <label>Archivo Consumo Abastecimiento</label>
+                <div class="dropzone"><input type="file" name="consumo" accept=".xls, .xlsx"></div>
+            </div>
+            <div class="campo">
+                <label>Archivo Traslados en Transito</label>
+                <div class="dropzone"><input type="file" name="transito" accept=".xls, .xlsx"></div>
+            </div>
+            <div class="campo">
+                <label>Archivo Detallado Compras (Unidades Recibidas)</label>
+                <div class="dropzone"><input type="file" name="recibidas" accept=".xls, .xlsx"></div>
+            </div>
+        </div>
+    </div>
+    <button type="submit">Generar Reparto</button>
+</form>
+
+<div class="overlay" id="overlay">
+    <div class="spinner"></div>
+    <p>Generando reparto...</p>
+</div>
+
+<script>
+    const form = document.querySelector("form");
+    const errorBox = document.getElementById("error-box");
+    const overlay = document.getElementById("overlay");
+
+    const archivos = {
+        maestro: "Maestro",
+        consumo: "Consumo Abastecimiento",
+        recibidas: "Cantidad Recibidas",
+        transito: "Traslados en Tránsito",
+    };
+
+    form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        errorBox.style.display = "none";
+
+        // Validar que estén los dos archivos
+        const faltantes = [];
+        for (const nombre in archivos){
+            const input = form.querySelector(`input[name="${nombre}"]`);
+            if (input.files.length === 0){
+                faltantes.push(archivos[nombre]);
+            }
+        }
+        if (faltantes.length > 0){
+            errorBox.textContent = " Faltan estos archivos: " + faltantes.join(", ");
+            errorBox.style.display = "block";
+            errorBox.scrollIntoView({ behavior: "smooth", block: "start" });
+            return;
+        }
+
+        overlay.style.display = "flex";
+        try {
+            const _n = new Date();
+            const hoy = _n.toISOString().slice(0,10) + "_" + String(_n.getHours())
+                .padStart(2,"0") + String(_n.getMinutes()).padStart(2,"0");
+            const fd = new FormData(form);
+            const resp = await fetch("/abastecimiento/reparto", { method: "POST", body: fd });
+            if (!resp.ok){
+                let m = "Hubo un error al generar el reparto.";
+                try { const j = await resp.json(); if (j.error) m = j.error; } catch(_){}
+                throw new Error(m);
+            }
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "Abastecimiento-" + hoy + ".xlsx";
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (err){
+            errorBox.textContent = " " + err.message;
+            errorBox.style.display = "block";
+            errorBox.scrollIntoView({ behavior: "smooth", block: "start" });
+        } finally {
+            overlay.style.display = "none";
+        }
+    });
+
+    // Arrastrar y soltar en las dropzones
+    ["dragover", "drop"].forEach((evento) => {
+        window.addEventListener(evento, (e) => e.preventDefault());
+    });
+    document.querySelectorAll(".dropzone").forEach((zona) => {
+        const input = zona.querySelector("input[type=file]");
+        zona.addEventListener("dragover", () => zona.classList.add("dragover"));
+        zona.addEventListener("dragleave", () => zona.classList.remove("dragover"));
+        zona.addEventListener("drop", (e) => {
+            zona.classList.remove("dragover");
+            input.files = e.dataTransfer.files;
+        });
+    });
+</script>
+{% endblock %}

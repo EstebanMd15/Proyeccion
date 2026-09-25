@@ -2,7 +2,6 @@ import streamlit as st, io
 from main import cargar_datos, exportar_excel
 from processor import ProyeccionProcessor
 from datetime import date
-from config import *
 
 st.set_page_config("Proyección Compras", layout="wide")
 st.title("Proyección Compras")

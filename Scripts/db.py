@@ -1,6 +1,6 @@
 import pandas as pd
 from sqlalchemy import create_engine, text
-import config
+from Scripts import config
 
 _engine = None
 
@@ -31,6 +31,28 @@ GROUP BY PERIODO, CODIGO
 ORDER BY PERIODO ASC, CONSUMO_TOTAL_GENERAL DESC
 """)
 
+SQL_ABASTECIMIENTO = text("""
+SELECT
+PERIODO,
+CODIGO_AUTORIZADO AS 'CODIGO PADRE', 
+CODIGO_ARTICULO AS 'CODIGO', 
+CODIGO_BODEGA AS 'CODIGO BODEGA', 
+UPPER(TRIM(REGEXP_REPLACE(MAX(BODEGA_ENCABEZADO),'[[:space:]]+', ' '))) AS 'SUCURSAL', 
+MAX(DESCRIPCION) AS DESCRIPCION,
+MAX(PRESENTACION) AS PRESENTACION, 
+MAX(`GRUPO`) AS `GRUPO`, 
+MAX(SIGLA_COMERCIAL_CLIENTE) AS SIGLA_COMERCIAL_CLIENTE, 
+MAX(TIPO_SERVICIO) AS TIPO_SERVICIO,
+SUM(CANTIDAD_PRESCRITA) AS 'CONSUMO TOTAL',
+SUM(SUM(CANTIDAD_PRESCRITA)) OVER(
+PARTITION BY PERIODO, CODIGO_AUTORIZADO) AS 'CONSUMO TOTAL PADRE'
+FROM DISPENSACION_ACUM WHERE PERIODO BETWEEN :desde AND :hasta
+GROUP BY PERIODO, CODIGO_AUTORIZADO, CODIGO_ARTICULO, CODIGO_BODEGA 
+ORDER BY PERIODO, `CONSUMO TOTAL` DESC;""")
+
+def consultar_abastecimiento(desde, hasta):
+    return pd.read_sql(SQL_ABASTECIMIENTO,get_engine(), params={'desde': desde, 'hasta': hasta})
+
 def consultar_dispensacion(desde, hasta):
     return pd.read_sql(SQL_DISPENSACION, get_engine(), params={'desde': desde, 'hasta': hasta})
 
@@ -44,3 +66,4 @@ def periodos_cargados():
     disp = pd.read_sql(text("SELECT DISTINCT PERIODO FROM DISPENSACION_ACUM ORDER BY PERIODO"),eng)["PERIODO"].astype(str).tolist()
     rem = pd.read_sql(text("SELECT DISTINCT PERIODO FROM REMISIONES_ACUM ORDER BY PERIODO"), eng)["PERIODO"].astype(str).tolist()
     return {"dispensacion": disp, "remisiones": rem}
+

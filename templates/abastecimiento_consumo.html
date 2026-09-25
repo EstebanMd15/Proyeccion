@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Consumos Abastecimiento · Motor de Inventarios{% endblock %}
+{% block nav_abast %}activo{% endblock %}
+{% block content %}
+<h1>Consumos Abastecimiento</h1>
+<div class="card">
+    <div id="msg-consumos-abastecimiento" class="aviso" style="display:none"></div>
+    <label>Desde</label>
+    <select id="desde"></select>
+    <label>Hasta</label>
+    <select id="hasta"></select>
+    <p class="hint" id="hint-periodos">Cargando periodos disponibles</p>
+
+    <div class="row-botones">
+        <button type="button" onclick="descargarConsumoAbastecimiento()">Descargar Consumo</button>
+    </div>
+    <div class="overlay" id="overlay">
+        <div class="spinner"></div>
+        <p>Generando Archivo</p>
+    </div>
+</div>
+<script>
+
+    const MESES = {'01':'Ene', '02':'Feb', '03':'Mar', '04':'Abr', '05':'May', '06':'Jun',
+               '07':'Jul', '08':'Ago', '09':'Sep', '10':'Oct', '11':'Nov', '12':'Dic'};
+    let PERIODOS = {dispensacion: []};
+
+    // al abrir: trae periodos de dispensacion y llena los desplegables
+    fetch('/rotacion/periodos').then(r => r.json()).then(p => {
+        const periodos = (p.dispensacion || []).map(x => x.replace('-','_')).sort();
+        llenarSelect(document.getElementById('desde'), periodos, periodos[0]);
+        llenarSelect(document.getElementById('hasta'), periodos, periodos[periodos.length - 1]);
+        document.getElementById('hint-periodos').textContent = periodos.length ? `Dispensación: ${etiquetaPeriodo(periodos[0])} a ${etiquetaPeriodo(periodos[periodos.length-1])}` :
+        'Sin periodos disponibles.';
+    }).catch(() => {
+        document.getElementById('hint-periodos').textContent = 'No se pudieron cargar los periodos disponibles.';
+    });
+
+    function etiquetaPeriodo(p){
+        const s = p.replace('-','_');
+        return MESES[s.slice(-2)] + ' ' + s.slice(0,4);
+    }
+
+    function llenarSelect(sel, periodos, seleccion){
+        sel.innerHTML = '';
+        periodos.forEach(p => {
+            const o = document.createElement('option');
+            o.value = p.replace('-','_');
+            o.textContent = etiquetaPeriodo(p);
+            sel.appendChild(o);
+        });
+        if (seleccion) sel.values = seleccion;
+    }
+
+    function mostrarMsg(texto){
+        const box = document.getElementById('msg-consumos-abastecimiento');
+        box.textContent = texto;
+        box.style.display = 'block';
+        box.scrollIntoView({behavior:'smooth', block:'nearest'});
+    }
+
+    async function descargarConsumoAbastecimiento(){
+        document.getElementById('msg-consumos-abastecimiento').style.display = 'none';
+        const dv = document.getElementById('desde').value;
+        const hv = document.getElementById('hasta').value;
+        if(!dv || !hv){ mostrarMsg('Elige el rango de meses (desde / hasta).'); return; }
+        if(dv > hv){ mostrarMsg('El "Desde" no puede set mayor que el "Hasta".'); return; }
+
+        const overlay = document.getElementById('overlay');
+        overlay.style.display = 'flex';
+        try {
+            const resp = await fetch(`/consumo_abastecimiento/consumo?desde=${dv}&hasta=${hv}`);
+            if(!resp.ok) throw Error('fallo');
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = 'Consumo_Abastecimiento.xlsx';
+            a.click(); URL.revokeObjectURL(url);
+        } catch(e){
+            mostrarMsg('Hubo un error al generar el archivo.');
+        } finally {
+            overlay.style.display = 'none';
+        }
+    }
+</script>
+{% endblock %}

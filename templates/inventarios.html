@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Inventarios · Motor Inventarios{% endblock %}
+{% block content %}
+<section class="hero">
+    <h1>Bienvenido al Motor de Inventarios</h1>
+    <p class="hero-sub">Seleccione un módulo</p>
+    <div class="hero-cards">
+<a href="/abastecimiento" class="hero-card">
+    <span class="hc-title">ABASTECIMIENTO</span>
+    <span class="hc-desc">Generar el Consumo para el Abastecimiento ...</span>
+</a>
+<a href="/reparto" class="hero-card">
+    <span class="hc-title">REPARTO</span>
+    <span class="hc-desc">Generar el Reparto a los Municipios</span>
+</a>
+
+    </div>
+</section>
+{% endblock %}

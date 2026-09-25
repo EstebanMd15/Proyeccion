@@ -2,16 +2,24 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>{% block title %} Motor de Compras{% endblock %}</title>
+    <title>{% block title %} Motor Inteligencia de Negocios{% endblock %}</title>
     <link rel="stylesheet" href="/static/style.css?v=3">
 </head>
 <body>
     <nav class="topbar">
-        <a href="/" class="brand">MOTOR DE COMPRAS</a>
-        <div class="modulos">
+        <a href="/" class="brand">MOTOR INTELIGENCIA DE NEGOCIOS</a>
+    <div class="modulos">
+        {% if seccion == 'compras' %}
             <a href="/proyeccion" class="modulo {% block nav_proy %}{% endblock %}">PROYECCIÓN</a>
             <a href="/consumos" class="modulo {% block nav_cons %}{% endblock %}">CONSUMOS</a>
-        </div>
+        {% elif seccion == 'inventarios' %}
+        <a href="/abastecimiento" class="modulo {% block nav_abast %}{% endblock %}">ABASTECIMIENTO</a>
+        <a href="/reparto" class="modulo {% block nav_reparto %}{% endblock %}">REPARTO</a>
+        {% else %}
+            <a href="/compras" class="modulo">COMPRAS</a>
+            <a href="/inventarios" class="modulo">INVENTARIOS</a>
+        {% endif %}
+    </div>
     </nav>
     {% block content %}{% endblock %}
 </body>

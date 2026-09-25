@@ -4,10 +4,10 @@ from datetime import date, datetime
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
-import processor
-from config import RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES, RUTA_STOCK_BODEGA, RUTA_STOCK_PUNTOS, \
+from Scripts import processor
+from Scripts.config import RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES, RUTA_STOCK_BODEGA, RUTA_STOCK_PUNTOS, \
     RUTA_MOLECULAS, TEXTO_MATRIZ, CODIGOS_MATRIZ_RIESGO
-from processor import ProyeccionProcessor
+from Scripts.processor import ProyeccionProcessor
 
 _CHARS_ILEGALES = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F]')
 

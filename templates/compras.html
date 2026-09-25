@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Compras · Motor Compras{% endblock %}
+{% block content %}
+<section class="hero">
+    <h1>Bienvenido al Motor de Compras</h1>
+    <p class="hero-sub">Selecciona un módulo</p>
+    <div class="hero-cards">
+        <a href="/proyeccion" class="hero-card">
+            <span class="hc-title">PROYECCIÓN</span>
+            <span class="hc-desc">Generar Proyección a partir de los archivos requeridos</span>
+        </a>
+        <a href="/consumos" class="hero-card">
+            <span class="hc-title">CONSUMOS</span>
+            <span class="hc-desc">Generar Consumos a partir de los periodos cargados en la BD</span>
+        </a>
+    </div>
+</section>
+{% endblock %}

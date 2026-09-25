@@ -1,17 +1,17 @@
 {% extends "base.html" %}
-{% block title %}Inicio · Motor de Compras{% endblock %}
+{% block title %}Inicio · Motor Inteligencia de Negocios{% endblock %}
 {% block content %}
 <section class="hero">
     <h1>Bienvenido</h1>
     <p class="hero-sub">Selecciona un módulo para comenzar.</p>
     <div class="hero-cards">
-        <a href="/proyeccion" class="hero-card">
-            <span class="hc-title">PROYECCIÓN</span>
-            <span class="hc-desc">Generar la proyección de pedidos a partir de los archivos.</span>
+        <a href="/compras" class="hero-card">
+            <span class="hc-title">COMPRAS</span>
+            <span class="hc-desc">Generar la proyección a partir de los archivos y consumos a partir de los periodos cargados en la BD.</span>
         </a>
-        <a href="/consumos" class="hero-card">
-            <span class="hc-title">CONSUMOS</span>
-            <span class="hc-desc">Descargar rotaciones (dispensación y remisiones) desde la base de datos.</span>
+        <a href="/inventarios" class="hero-card">
+            <span class="hc-title">INVENTARIOS</span>
+            <span class="hc-desc">Generar el reparto a los municipios y el consumo para el abastecimiento desde los periodos cargador en la BD.</span>
         </a>
     </div>
 </section>

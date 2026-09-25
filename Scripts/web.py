@@ -3,11 +3,13 @@ from fastapi import FastAPI, Request, File, UploadFile, Form
 from fastapi.templating import Jinja2Templates
 from datetime import date
 from fastapi.responses import StreamingResponse, JSONResponse
-from main import cargar_datos, exportar_excel
-from processor import ProyeccionProcessor
+from Scripts.main import cargar_datos, exportar_excel, leer_con_encabezado
+from Scripts.processor import ProyeccionProcessor
 from fastapi.staticfiles import StaticFiles
 import uuid
-import db
+import pandas as pd
+from Scripts import db, abastecimiento
+
 
 app = FastAPI()
 resultados = {}
@@ -161,27 +163,75 @@ def descargar(download_id: str):
 
     )
 
+@app.post("/abastecimiento/reparto")
+def abastecimiento_reparto(
+        consumo: UploadFile | None = File(None),
+        recibidas: UploadFile | None = File(None),
+        transito: UploadFile | None = File(None),
+        maestro: UploadFile | None = File(None),):
+
+    faltantes = [n for n, f in {"consumo": consumo, "recibidas": recibidas,
+                                "transito": transito, "maestro": maestro}.items()
+                 if f is None or not f.filename]
+    if faltantes:
+        return JSONResponse({"error": "Faltan archivos: " + ", ".join(faltantes)}, status_code=400)
+    try:
+        df_consumo = pd.read_excel(consumo.file)
+        df_recibidas = leer_con_encabezado(recibidas.file, 'Cód Artículo')
+        df_transito = leer_con_encabezado(transito.file, 'Codigo')
+        df_maestro = leer_con_encabezado(maestro.file, 'Codigo')
+
+        pedidos = abastecimiento.recibidas_desde_archivo(df_recibidas)
+        trans = abastecimiento.transito_desde_archivo(df_transito)
+        info = abastecimiento.info_producto_desde_maestro(df_maestro)
+
+        buffer = io.BytesIO()
+        abastecimiento.generar_abastecimiento(df_consumo, pedidos, trans, info, buffer)
+        buffer.seek(0)
+    except Exception as e:
+        return JSONResponse({"error": "No se pudo generar el reparto. Revisa que los archivos sean "
+                                      "el Consumo, Recibidas, Tránsito y Maestro. (" + str(e) + ")"},
+                            status_code=400)
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="Abastecimiento-{date.today():%Y-%m-%d}.xlsx"'},
+    )
+@app.get("/compras")
+def compras_pagina(request: Request):
+    return templates.TemplateResponse(request, "compras.html", {"seccion":"compras"})
+@app.get("/inventarios")
+def inventarios_pagina(request: Request):
+    return templates.TemplateResponse(request, "inventarios.html", {"seccion":"inventarios"})
+@app.get("/abastecimiento/consumo")
+def abastecimiento_consumo(desde: str, hasta: str):
+    df = db.consultar_abastecimiento(desde, hasta)
+    return _excel_response(df, "Consumo_Abastecimiento.xlsx")
+@app.get("/abastecimiento")
+def abastecimiento_pagina(request: Request):
+    return templates.TemplateResponse(request, "abastecimiento_consumo.html", {"seccion": "inventarios"})
 @app.get("/rotacion/dispensacion")
 def rotacion_dispensacion(desde: str, hasta: str):
     df = db.consultar_dispensacion(desde, hasta)
     return _excel_response(df, "Rotacion_Dispensacion.xlsx")
-
 @app.get("/rotacion/remisiones")
 def rotacion_remisiones(desde: str, hasta: str):
     df = db.consultar_remisiones(desde, hasta)
     return _excel_response(df, "Rotacion_remisiones.xlsx")
-
+@app.get("/reparto")
+def reparto_pagina(request: Request):
+    return templates.TemplateResponse(request, "reparto.html", {"seccion": "inventarios"})
 @app.get("/")
 def home(request: Request):
     return templates.TemplateResponse(request, "home.html")
 
 @app.get("/proyeccion")
 def proyeccion(request: Request):
-    return templates.TemplateResponse(request, "proyeccion.html")
+    return templates.TemplateResponse(request, "proyeccion.html", {"seccion": "compras"})
 
 @app.get("/consumos")
 def consumos(request: Request):
-    return templates.TemplateResponse(request, "consumos.html")
+    return templates.TemplateResponse(request, "consumos.html", {"seccion": "compras"})
 
 @app.get("/rotacion/periodos")
 def rotacion_periodos():
