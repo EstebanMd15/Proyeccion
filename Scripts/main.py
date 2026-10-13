@@ -1,4 +1,5 @@
 import re
+import io
 import pandas as pd
 from datetime import date, datetime
 from openpyxl.styles import Font, Alignment, PatternFill
@@ -6,7 +7,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 from Scripts import processor
 from Scripts.config import RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES, RUTA_STOCK_BODEGA, RUTA_STOCK_PUNTOS, \
-    RUTA_MOLECULAS, TEXTO_MATRIZ, CODIGOS_MATRIZ_RIESGO
+    RUTA_MOLECULAS, RUTA_PENDIENTES_REM, RUTA_PENDIENTES_DISP, TEXTO_MATRIZ, CODIGOS_MATRIZ_RIESGO
 from Scripts.processor import ProyeccionProcessor
 
 _CHARS_ILEGALES = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F]')
@@ -62,7 +63,22 @@ DESCRIPCIONES_COLUMNAS = {
     'Estado': 'Calculado - COMPRAR si hay cantidad a pedir en ESTA hoja, si no NO COMPRAR',
     'Sobrantes Disp': 'Sobrante (Objetivo disp - Stock_Total) (positivo = falta, negativo = sobra)',
     'Sobrantes Remi': 'Sobrante (objetivo remi - Bodega Sobrante) (positivo = falta, negativo = sobra)',
-    'Total Sobrantes': 'Unidades físicas que sobran (sin doble conteo)'
+    'Total Sobrantes': 'Unidades físicas que sobran (sin doble conteo)',
+    'Pendientes_Dispensacion': 'Archivo Pendientes Dispensacion - Cant. Pendiente sumada por código',
+    'Pendientes_Comercial': 'Archivo Pendientes Comercial - Cant. Pendiente sumada por código',
+    'Origen_Pendiente': 'Calculado - Archvivo de donde viene el pendiente: DISPENSACION, COMERCIAL O AMBOS',
+    'Valorizado Pendientes Disp': 'Calculado - SOLO el pendiente de dispensacion X Ultimo costo',
+    'Valorizado Pendientes Com': 'Calculado - SOLO el pendiente de comercial X Ultimo Costo',
+    'Cantidad a Pedir + Pend Disp': 'Calculado - Cantidad a Pedir + Pendientes_Disp, redondeado al empaque segun Rotación_Dispensacion (A/M Hacia arriba, B hacia abajo)',
+    'Cantidad a Pedir + Pend Com': 'Calculado - Cantidad a Pedir + Pend Com, redondeado al empaque segun Rotación_Remisiones (A/M Hacia arriba, B hacía abajo)',
+    'Valorizado Cant + Pend Disp': 'Calculado - Cantidad a Pedir + Pend Disp X Ultimo Costo',
+    'Valorizado Cant + Pend Com': 'Calculado - Cantidad a Pedir + Pend Com X Ultimo Costo',
+    'Estado + Pend Disp': 'Calculado - COMPRAR si Cantidad a Pedir + Pend Disp > 0, si no NO COMPRAR',
+    'Estado + Pend Com': 'Calculado - Comprar si Cantidad a Pedir + Pend COm > 0, si no NO COMPRAR',
+    'Pendientes Total': 'Calculado - Pendientes_Dispensacion + Pendientes_Comercial',
+    'Valorizado Pendientes Total': 'Calculado - Pendientes Total X Ultimo Costo',
+    'Cant. a Pedir sin CEDI + Pend Total': 'Calculado - Cantidad a Pedir sin CEDI + pendientes de los dos canales (cada uno redondeado con la rotacion de su canal)',
+    'Valorizado Cant sin CEDI + Pend Total': 'Calculado - Cantidad a Pedir sin CEDI + Pend Total x Ultimo Costo',
 }
 
 
@@ -71,6 +87,9 @@ def _descripcion_columna(col):
     if col in DESCRIPCIONES_COLUMNAS:
         return DESCRIPCIONES_COLUMNAS[col]
     col = str(col)
+    m = re.match(r'(.+ \+ Pend (?:Disp|Com)) sin (?:CEDI|PUNTOS)$', col)
+    if m:
+        return DESCRIPCIONES_COLUMNAS.get(m.group(1),'')
     if re.match(r'Consumo_Disp_[A-Za-z]{3}_\d{4}$', col):
         return 'Dispensacion - consumo del mes'
     if re.match(r'Consumo_Rem_[A-Za-z]{3}_\d{4}$', col):
@@ -105,15 +124,52 @@ def leer_con_encabezado(ruta, col_clave, max_filas=10, **kwargs):
         df = df.drop(columns=df.columns[0])
     return df
 
+def leer_csv_pipe(ruta, col_clave, cols=None, max_filas=10, encoding='latin-1'):
+    if isinstance(ruta, (str, bytes)) or hasattr(ruta, '__fspath__'):
+        with open(ruta, 'rb') as fh:
+            crudo = fh.read()
+    else:
+        crudo = ruta.read()
+    texto = crudo.decode(encoding)
+
+    lineas = texto.splitlines()[:max_filas]
+    fila_encabezado = next((i for i, l in enumerate(lineas)
+                            if col_clave in [c.strip() for c in l.split('|')]), None)
+    if fila_encabezado is None:
+        raise ValueError(f"No encontre '{col_clave}' en las primeras {max_filas} filas del archivo.")
+    n_campos = len(lineas[fila_encabezado].split('|'))
+
+    df = pd.read_csv(io.StringIO(texto), sep='|', skiprows=fila_encabezado, dtype=str,
+                     engine='python', on_bad_lines=lambda campos: campos[:n_campos])
+    df.columns = df.columns.str.strip()
+    if cols:
+        df = df[cols]
+    return df.apply(lambda s: s.str.strip())
+
 def cargar_datos(RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES, RUTA_STOCK_BODEGA,
-                 RUTA_STOCK_PUNTOS, RUTA_MOLECULAS):
+                 RUTA_STOCK_PUNTOS, RUTA_MOLECULAS, RUTA_PENDIENTES_DISP=None, RUTA_PENDIENTES_REM=None,):
     maestro = leer_con_encabezado(RUTA_MAESTRO, 'Codigo')
     molecula_compra = leer_con_encabezado(RUTA_MOLECULAS, 'Codigo Articulo')
     consumo_dispensacion = pd.read_excel(RUTA_DISPENSACION)
     consumo_remisiones = pd.read_excel(RUTA_REMISIONES)
     stock_bodega = leer_con_encabezado(RUTA_STOCK_BODEGA, 'Codigo Articulo')
     stock_puntos = leer_con_encabezado(RUTA_STOCK_PUNTOS, 'Codigo Articulo')
-    return maestro, consumo_dispensacion, consumo_remisiones, stock_bodega, stock_puntos, molecula_compra
+
+    cols_pend_disp = ['Cod. Artículo', 'Cant. Pendiente', 'Npmbre EPS']
+    if RUTA_PENDIENTES_DISP is not None:
+        pendientes_disp = leer_csv_pipe(RUTA_PENDIENTES_DISP, 'Cod. Artículo',
+                                        cols=cols_pend_disp)
+    else:
+        pendientes_disp = pd.DataFrame(columns=cols_pend_disp)
+
+    cols_pend_rem = ['Código Articulo', 'Pendientes Und']
+    if RUTA_PENDIENTES_REM is not None:
+        pendientes_rem = leer_con_encabezado(RUTA_PENDIENTES_REM, 'Código Articulo')[cols_pend_rem]
+    else:
+        pendientes_rem = pd.DataFrame(columns=cols_pend_rem)
+
+    return (maestro, consumo_dispensacion, consumo_remisiones, stock_bodega, stock_puntos,
+            molecula_compra, pendientes_disp, pendientes_rem)
 
 
 def _valorizar_estado(sub, col_cantidad):
@@ -122,6 +178,17 @@ def _valorizar_estado(sub, col_cantidad):
         sub[col_cantidad], sub.get('Ultimo Costo'), sub.get('Costo Promedio'))
     sub['Estado'] = sub[col_cantidad].gt(0).map({True: 'COMPRAR', False: 'NO COMPRAR'})
     return sub
+
+def _cols_pendientes(sufijo=''):
+    """Columnas de pendientes de una hoja Todo; sufijo '' / 'sin CEDI' / ' sin PUNTOS'."""
+    cols = []
+    for canal, col_pend in (('Disp', 'Pendientes_Dispensacion'), ('Com', 'Pendientes_Comercial')):
+        cols += [col_pend,
+                 f'Cantidad a Pedir + Pend {canal}{sufijo}',
+                 f'Valorizado Pendientes {canal}',
+                 f'Valorizado Cant + Pend {canal}{sufijo}',
+                 f'Estado + Pend {canal}{sufijo}']
+    return cols + ['Pendientes Total', 'Valorizado Pendientes Total','Origen_Pendiente']
 
 
 def construir_hojas(processor):
@@ -140,12 +207,12 @@ def construir_hojas(processor):
 
     # ---------------------------------------------------------- DISPENSACION
 
-    colsDisp =['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula','Categoria','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
+    colsDisp =['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula','Categoria Medicamento','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
             'Costo Promedio', 'Ultimo Costo', 'Consumo_NEPS_Capita','Consumo_NEPS_Evento',
             'Consumo_FOMAG_Evento', 'Consumo_Sin_Clasificar', 'Consumo_Dispensacion_Total',
             *mensuales_disp, 'Demanda_Disp_Mensual', 'Rotacion_Dispensacion', 'Stock_Bodega_Principal',
             'Stock_Puntos_Dispensacion', 'Stock_Total', 'Necesidad_Disp', 'Pedir_NEPS_Capita', 'Pedir_NEPS_Evento',
-            'Pedir_FOMAG_Evento', 'Pedir_Dispensacion_Total', 'Estado', 'Valorizado Ult Costo', 'Valorizado Promedio']
+            'Pedir_FOMAG_Evento', 'Pedir_Dispensacion_Total', 'Estado', 'Valorizado Ult Costo', 'Valorizado Promedio', 'Pendientes_Dispensacion']
     mask = (df.get('Consumo_Dispensacion_Total', 0) > 0) | (df.get('Pedir_Dispensacion_Total', 0) > 0)
     disp = (df.loc[mask, [c for c in colsDisp if c in df.columns]]
             .sort_values('Pedir_Dispensacion_Total', ascending=False).copy())
@@ -155,10 +222,10 @@ def construir_hojas(processor):
     # ------------------------------------------------------------ REMISIONES
     # Remisiones son clientes distintos: el stock de puntos NO les aplica (ni se
     # muestra ni interviene en el pedido). Solo bodega principal.
-    colsRem = ['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula','Categoria','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
+    colsRem = ['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula','Categoria Medicamento','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
                'Costo Promedio', 'Ultimo Costo', *mensuales_rem, 'Consumo_Remisiones','Demanda_Rem_Mensual',
                'Rotacion_Remisiones','Stock_Bodega_Principal', 'Bodega_Disponible_Comercial', 'Necesidad_Rem','Pedir_Remisiones',
-               'Estado', 'Valorizado Ult Costo', 'Valorizado Promedio']
+               'Estado', 'Valorizado Ult Costo', 'Valorizado Promedio', 'Pendientes_Comercial']
     mask = (df.get('Consumo_Remisiones', 0) > 0) | (df.get('Pedir_Remisiones', 0) > 0)
     rem = (df.loc[mask, [c for c in colsRem if c in df.columns]]
            .sort_values('Pedir_Remisiones', ascending=False).copy())
@@ -166,7 +233,7 @@ def construir_hojas(processor):
     hojas['Remisiones'] = rem
 
     # ------------------------------------------------------------------ TODO
-    colsTodo = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Categoria','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
+    colsTodo = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Categoria Medicamento','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
                 'Costo Promedio', 'Ultimo Costo', 'Consumo_Molecula', 'Consumo_NEPS_Capita',
                 'Consumo_NEPS_Evento', 'Consumo_FOMAG_Evento', 'Consumo_Dispensacion_Total',
                 'Consumo_Remisiones', *mensuales, 'Consumo_Acum',
@@ -174,13 +241,13 @@ def construir_hojas(processor):
                 'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria',
                 'Necesidad_Disp','Necesidad_Rem','Necesidad_Mensual','Valorizado Promedio Sin Rest Inv','Valorizado Ult Costo Sin Rest Inv', 'Stock_Bodega_Principal',
                 'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp','Sobrantes Remi','Total Sobrantes','Cantidad a Pedir','Estado','Comentario',
-                'Valorizado Promedio','Valorizado Ult Costo','Pedir_NEPS_Capita', 'Pedir_NEPS_Evento','Pedir_FOMAG_Evento',
+                'Valorizado Promedio','Valorizado Ult Costo', *_cols_pendientes(), 'Pedir_NEPS_Capita', 'Pedir_NEPS_Evento','Pedir_FOMAG_Evento',
                 'Pedir_Dispensacion_Total','Pedir_Remisiones']
     hojas['Todo'] = (df[[c for c in colsTodo if c in df.columns]]
                      .sort_values('Cantidad a Pedir', ascending=False))
 
     # -------------------------------------------------------------- TODO SIN CEDI
-    colsTodoSinCedi = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Categoria','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
+    colsTodoSinCedi = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Categoria Medicamento','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
                 'Costo Promedio', 'Ultimo Costo', 'Consumo_Molecula', 'Consumo_NEPS_Capita',
                 'Consumo_NEPS_Evento', 'Consumo_FOMAG_Evento', 'Consumo_Dispensacion_Total',
                 'Consumo_Remisiones', *mensuales, 'Consumo_Acum',
@@ -188,7 +255,8 @@ def construir_hojas(processor):
                 'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria',
                 'Necesidad_Disp','Necesidad_Rem','Necesidad_Mensual','Valorizado Promedio Sin Rest Inv','Valorizado Ult Costo Sin Rest Inv', 'Stock_Bodega_Principal',
                 'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp sin CEDI','Sobrantes Remi sin CEDI','Total Sobrantes sin CEDI','Cantidad a Pedir sin CEDI','Estado','Comentario',
-                'Valorizado Promedio sin CEDI','Valorizado Ult Costo sin CEDI','Pedir_NEPS_Capita sin CEDI', 'Pedir_NEPS_Evento sin CEDI','Pedir_FOMAG_Evento sin CEDI',
+                'Valorizado Promedio sin CEDI','Valorizado Ult Costo sin CEDI', *_cols_pendientes(' sin CEDI'),'Cant. a Pedir sin CEDI + Pend Total','Valorizado Cant sin CEDI + Pend Total',
+                'Pedir_NEPS_Capita sin CEDI', 'Pedir_NEPS_Evento sin CEDI','Pedir_FOMAG_Evento sin CEDI',
                 'Pedir Dispensacion Total sin CEDI','Pedir Remisiones sin CEDI']
     hojas['Todo REST CEDI'] = (df[[c for c in colsTodoSinCedi if c in df.columns]]
                             .sort_values('Cantidad a Pedir sin CEDI', ascending=False)).copy()
@@ -198,7 +266,7 @@ def construir_hojas(processor):
     )
 
     #--------------------------------------------------------------- TODO SIN PUNTOS
-    colsTodoSinPuntos = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Categoria','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
+    colsTodoSinPuntos = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Categoria Medicamento','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
                 'Costo Promedio', 'Ultimo Costo', 'Consumo_Molecula', 'Consumo_NEPS_Capita',
                 'Consumo_NEPS_Evento', 'Consumo_FOMAG_Evento', 'Consumo_Dispensacion_Total',
                 'Consumo_Remisiones', *mensuales, 'Consumo_Acum',
@@ -206,7 +274,7 @@ def construir_hojas(processor):
                 'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria',
                 'Necesidad_Disp','Necesidad_Rem','Necesidad_Mensual','Valorizado Promedio Sin Rest Inv','Valorizado Ult Costo Sin Rest Inv', 'Stock_Bodega_Principal',
                 'Stock_Puntos_Dispensacion','Stock_Total','Sobrantes Disp sin PUNTOS','Sobrantes Remi sin PUNTOS','Total Sobrantes sin PUNTOS','Cantidad a Pedir sin PUNTOS','Estado','Comentario',
-                'Valorizado Promedio sin PUNTOS','Valorizado Ult Costo sin PUNTOS','Pedir_NEPS_Capita sin PUNTOS', 'Pedir_NEPS_Evento sin PUNTOS','Pedir_FOMAG_Evento sin PUNTOS',
+                'Valorizado Promedio sin PUNTOS','Valorizado Ult Costo sin PUNTOS', *_cols_pendientes(' sin PUNTOS'), 'Pedir_NEPS_Capita sin PUNTOS', 'Pedir_NEPS_Evento sin PUNTOS','Pedir_FOMAG_Evento sin PUNTOS',
                 'Pedir Dispensacion Total sin PUNTOS','Pedir Remisiones sin PUNTOS']
     hojas['Todo REST PUNTOS'] = (df[[c for c in colsTodoSinPuntos if c in df.columns]]
                                 .sort_values('Cantidad a Pedir sin PUNTOS', ascending=False)).copy()
@@ -265,6 +333,11 @@ def exportar_excel(processor, ruta=None, buffer=None):
     color_fila_estado_verde = PatternFill('solid', fgColor='D9EAD3')
     color_celda_estado = PatternFill('solid', fgColor='FFFF09')
     color_celdas_sobrantes = PatternFill('solid', fgColor='9EB8CA')
+    color_pendientes_dispensacion = PatternFill('solid', fgColor='FCE5CD')
+    color_pendientes_comercial = PatternFill('solid', fgColor='D9D2E9')
+    color_pendientes_Total = PatternFill('solid', fgColor='EAD1DC')
+    color_origen_pendiente = PatternFill('solid', fgColor='C7D3C0')
+    color_totales = PatternFill('solid', fgColor='D6FB61')
 
 
     def colorear_encabezados(ws, sub, nombre_col, fill):
@@ -308,14 +381,29 @@ def exportar_excel(processor, ruta=None, buffer=None):
                     ws.auto_filter.ref = f'A2:{ws.cell(2, ws.max_column).coordinate}'
 
                 if nombre in ('Todo', 'Todo REST CEDI', 'Todo REST PUNTOS') and 'Estado' in sub.columns:
-                    col_estado = list(sub.columns).index('Estado') + 1
-                    for r in range(3, ws.max_row + 1):
-                        celda_estado = ws.cell(row=r, column=col_estado)
-                        valor = str(celda_estado.value).strip().upper() if celda_estado.value is not None else ""
-                        if valor == 'COMPRAR':
-                            celda_estado.fill = color_fila_estado_verde
-                        if valor == 'NO COMPRAR':
-                            celda_estado.fill = color_fila_estado_rojo
+                    cols_estado = [c for c in sub.columns if c == 'Estado' or c.startswith('Estado + Pend')]
+                    for nombre_estado in cols_estado:
+                        col_estado = list(sub.columns).index(nombre_estado) + 1
+                        for r in range(3, ws.max_row + 1):
+                            celda_estado = ws.cell(row=r, column=col_estado)
+                            valor = str(celda_estado.value).strip().upper() if celda_estado.value is not None else ""
+                            if valor == 'COMPRAR':
+                                celda_estado.fill = color_fila_estado_verde
+                            if valor == 'NO COMPRAR':
+                                celda_estado.fill = color_fila_estado_rojo
+                    for c in sub.columns:
+                        if 'Pend' not in c:
+                            continue
+                        if 'Disp' in c:
+                            colorear_encabezados(ws, sub, c, color_pendientes_dispensacion)
+                        elif 'Com' in c:
+                            colorear_encabezados(ws, sub, c, color_pendientes_comercial)
+                        elif c in ('Pendientes Total', 'Valorizado Pendientes Total'):
+                            colorear_encabezados(ws, sub, c, color_pendientes_Total)
+                        elif c in ('Cant. a Pedir sin CEDI + Pend Total', 'Valorizado Cant sin CEDI + Pend Total'):
+                            colorear_encabezados(ws, sub, c, color_totales)
+                        elif c == 'Origen_Pendiente':
+                            colorear_encabezados(ws, sub, c, color_origen_pendiente)
                     for c in ['Sobrantes Disp', 'Sobrantes Remi', 'Total Sobrantes']:
                         colorear_encabezados(ws, sub, c, color_celdas_sobrantes)
                     for c in ['Sobrantes Disp sin CEDI', 'Sobrantes Remi sin CEDI', 'Total Sobrantes sin CEDI']:
@@ -365,10 +453,10 @@ def exportar_excel(processor, ruta=None, buffer=None):
 
 
 def main():
-    maestro, consumo_dispensacion, consumo_remisiones, stock_bodega, stock_puntos, molecula_compra = cargar_datos(RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES,
-                                                                                                                  RUTA_STOCK_BODEGA, RUTA_STOCK_PUNTOS, RUTA_MOLECULAS)
+    datos = cargar_datos(RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES, RUTA_STOCK_BODEGA,
+                         RUTA_STOCK_PUNTOS, RUTA_MOLECULAS, RUTA_PENDIENTES_DISP, RUTA_PENDIENTES_REM)
 
-    processor = ProyeccionProcessor(maestro, consumo_dispensacion, consumo_remisiones, stock_bodega, stock_puntos, molecula_compra)
+    processor = ProyeccionProcessor(*datos)
     processor.procesar()
 
 

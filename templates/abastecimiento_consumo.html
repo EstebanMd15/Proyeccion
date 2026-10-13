@@ -49,7 +49,7 @@
             o.textContent = etiquetaPeriodo(p);
             sel.appendChild(o);
         });
-        if (seleccion) sel.values = seleccion;
+        if (seleccion) sel.value = seleccion;
     }
 
     function mostrarMsg(texto){
@@ -64,12 +64,12 @@
         const dv = document.getElementById('desde').value;
         const hv = document.getElementById('hasta').value;
         if(!dv || !hv){ mostrarMsg('Elige el rango de meses (desde / hasta).'); return; }
-        if(dv > hv){ mostrarMsg('El "Desde" no puede set mayor que el "Hasta".'); return; }
+        if(dv > hv){ mostrarMsg('El "Desde" no puede ser mayor que el "Hasta".'); return; }
 
         const overlay = document.getElementById('overlay');
         overlay.style.display = 'flex';
         try {
-            const resp = await fetch(`/consumo_abastecimiento/consumo?desde=${dv}&hasta=${hv}`);
+            const resp = await fetch(`/abastecimiento/consumo?desde=${dv}&hasta=${hv}`);
             if(!resp.ok) throw Error('fallo');
             const blob = await resp.blob();
             const url = URL.createObjectURL(blob);

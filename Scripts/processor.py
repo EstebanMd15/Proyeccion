@@ -29,7 +29,7 @@ class ProyeccionProcessor:
         'Consumo_Sin_Clasificar',
     )
 
-    def __init__(self, maestro, consumo_dispensacion, consumo_remisiones, stock_bodega, stock_puntos, molecula_compra,
+    def __init__(self, maestro, consumo_dispensacion, consumo_remisiones, stock_bodega, stock_puntos, molecula_compra, pendientes_disp=None, pendientes_rem=None,
                  criterio_rotacion=None, cobertura_dias_DISP = None, lead_time_dias_DISP = None, dias_seguridad_DISP = None,
                  cobertura_dias_REMI = None, lead_time_dias_REMI = None, dias_seguridad_REMI = None, umbral_A=None, umbral_M=None):
         self.maestro = maestro
@@ -38,6 +38,10 @@ class ProyeccionProcessor:
         self.stock_bodega = stock_bodega
         self.stock_puntos = stock_puntos
         self.molecula_compra = molecula_compra
+        self.pendientes_disp = (pendientes_disp if pendientes_disp is not None
+                                else pd.DataFrame(columns=['Codigo', 'Pendientes_Dispensacion']))
+        self.pendientes_rem = (pendientes_rem if pendientes_rem is not None
+                               else pd.DataFrame(columns=['Codigo', 'Pendientes_Comercial']))
         self.consumo_consolidado = None
         self.maestro_consumo = None
 
@@ -119,6 +123,18 @@ class ProyeccionProcessor:
                                        inplace=True)
         self.molecula_compra.rename(columns={'Descripcion Molecula': 'Molecula'}, inplace=True)
 
+        self.pendientes_disp = self.pendientes_disp.rename(
+            columns={'Cod. Artículo': 'Codigo', 'Cant. Pendiente': 'Pendientes_Dispensacion'})
+
+        self.pendientes_rem = self.pendientes_rem.rename(
+            columns={'Código Articulo': 'Codigo', 'Pendientes Und': 'Pendientes_Comercial'})
+
+        for attr, col in (('pendientes_disp', 'Pendientes_Dispensacion'),
+                          ('pendientes_rem', 'Pendientes_Comercial')):
+            df = getattr(self, attr)
+            df['Codigo'] = df['Codigo'].astype(str).str.strip()
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
         # Desduplicar catálogo maestro
         self.maestro = self.maestro.drop_duplicates(subset=['Codigo'], keep='first')
 
@@ -184,7 +200,8 @@ class ProyeccionProcessor:
         self.codigos_excluidos_detalle = {}
 
         fuentes = ['maestro', 'consumo_dispensacion', 'consumo_remisiones',
-                   'stock_bodega', 'stock_puntos', 'molecula_compra']
+                   'stock_bodega', 'stock_puntos', 'molecula_compra',
+                   'pendientes_disp', 'pendientes_rem']
 
         for nombre in fuentes:
             df = getattr(self, nombre)
@@ -195,6 +212,25 @@ class ProyeccionProcessor:
             if n:
                 self.codigos_excluidos_detalle[nombre] = n
                 setattr(self, nombre, df[~excluir].copy())
+
+    def excluir_codigos_neps(self):
+        codigos = tuple(c.upper() for c in getattr(config, 'CODIGOS_EXCLUIDOS_NEPS', ()))
+        self.codigos_excluidos_neps = {}
+        if not codigos:
+            return
+        for nombre, col_cliente in (('consumo_dispensacion', 'SIGLA_COMERCIAL_CLIENTE'),
+                                    ('consumo_dispensacion_visual', 'SIGLA_COMERCIAL_CLIENTE'),
+                                    ('pendientes_disp', 'Npmbre EPS')):
+            df = getattr(self, nombre, None)
+            if df is None or df.empty or col_cliente not in df.columns:
+                continue
+            col = 'Codigo' if 'Codigo' in df.columns else 'CODIGO'
+            sigla = df[col_cliente].astype(str).str.strip().str.upper()
+            quitar = df[col].astype(str).str.strip().str.upper().isin(codigos) & sigla.str.contains(
+                'NUEVA EPS|NEPS|NUEVA EMPRESA PROMOTORA', na=False)
+            if quitar.any():
+                self.codigos_excluidos_neps[nombre] = int(quitar.sum())
+                setattr(self, nombre, df[~quitar].copy())
 
     def consolidar_consumos(self):
         disp_pivot = self.consumo_dispensacion.pivot_table(
@@ -221,11 +257,14 @@ class ProyeccionProcessor:
         rem_agrupado = self.consumo_remisiones.groupby('Codigo')['Consumo_Remisiones'].sum().reset_index()
         stock_bodega_agrupado = self.stock_bodega.groupby('Codigo')['Stock_Bodega_Principal'].sum().reset_index()
         stock_puntos_agrupado = self.stock_puntos.groupby('Codigo')['Stock_Puntos_Dispensacion'].sum().reset_index()
+        pend_disp_agrupado = self.pendientes_disp.groupby('Codigo')['Pendientes_Dispensacion'].sum().reset_index()
+        pend_rem_agrupado = self.pendientes_rem.groupby('Codigo')['Pendientes_Comercial'].sum().reset_index()
 
         self.consumo_consolidado = pd.merge(disp_pivot, rem_agrupado, on='Codigo', how='outer')
         self.consumo_consolidado = pd.merge(self.consumo_consolidado, stock_bodega_agrupado, on='Codigo', how='outer')
         self.consumo_consolidado = pd.merge(self.consumo_consolidado, stock_puntos_agrupado, on='Codigo', how='outer')
-
+        self.consumo_consolidado = pd.merge(self.consumo_consolidado, pend_disp_agrupado, on='Codigo', how='outer')
+        self.consumo_consolidado = pd.merge(self.consumo_consolidado, pend_rem_agrupado, on='Codigo', how='outer')
         self.consumo_consolidado.fillna(0, inplace=True)
 
         # Remisiones es su propio canal y va aparte: no es dispensacion.
@@ -255,7 +294,9 @@ class ProyeccionProcessor:
             'Consumo_Acum',
             'Stock_Bodega_Principal',
             'Stock_Puntos_Dispensacion',
-            'Stock_Total'
+            'Stock_Total',
+            'Pendientes_Dispensacion',
+            'Pendientes_Comercial',
         ]
 
         self.maestro_consumo = pd.merge(
@@ -267,6 +308,14 @@ class ProyeccionProcessor:
 
         cols_numericas = [c for c in cols_a_traer if c != 'Codigo']
         self.maestro_consumo[cols_numericas] = self.maestro_consumo[cols_numericas].fillna(0)
+
+        # De qué canal viene el pendiente (informativo, no entra al calculo)
+        hay_disp = self.maestro_consumo['Pendientes_Dispensacion'] > 0
+        hay_com = self.maestro_consumo['Pendientes_Comercial'] > 0
+        self.maestro_consumo['Origen_Pendiente'] = np.select(
+            [hay_disp & hay_com, hay_disp, hay_com],
+            ['AMBOS', 'DISPENSACION', 'COMERCIAL'], default='')
+
 
         # Demanda mensual 50/30/20 por canal (se usa para calcular el pedido)
         disp = self.demanda_disp_mensual.rename(columns={'Consumo_Dispensacion_ponderado': 'Demanda_Disp_Mensual'})
@@ -483,7 +532,7 @@ class ProyeccionProcessor:
         return (cantidad * costo).round(2)
 
     @staticmethod
-    def redondear_por_empaque(cantidad, pastillas, rotacion):
+    def redondear_por_empaque(cantidad, pastillas, rotacion, b_hacia_abajo=False):
         unidades = pd.to_numeric(cantidad, errors='coerce').fillna(0).to_numpy(dtype='float64')
         cantPas = pd.to_numeric(pastillas, errors='coerce').fillna(0).to_numpy(dtype='float64')
         rot = rotacion.astype(str).to_numpy()
@@ -496,10 +545,10 @@ class ProyeccionProcessor:
         resto = unidades - piso
 
         hacia_arriba = np.isin(rot, ['A', 'M'])
-        baja = resto < (uni_seguro / 2.0)
+        baja = resto < (uni_seguro * getattr(config, 'PORCENTAJE_REDONDEO_EMPAQUE', 0.5))
 
-        res = np.where(hacia_arriba, techo, np.where(baja, piso, techo))
-        res = np.where(sin_empaque, unidades, res)
+        resto_b = piso if b_hacia_abajo else np.where(baja, piso, techo)
+        res = np.where(hacia_arriba, techo, resto_b)
         return res.round().astype('int64')
 
     def pedido_por_canal(self, df):
@@ -687,6 +736,8 @@ class ProyeccionProcessor:
                 'total':      'Cantidad a Pedir',
                 'val_ult':    'Valorizado Ult Costo',
                 'val_prom':   'Valorizado Promedio',
+                'sufijo':     '',
+
             },
             {  # hoja TODO REST CEDI
                 'segmentos':  ['Pedir_NEPS_Capita sin CEDI', 'Pedir_NEPS_Evento sin CEDI', 'Pedir_FOMAG_Evento sin CEDI'],
@@ -695,6 +746,7 @@ class ProyeccionProcessor:
                 'total':      'Cantidad a Pedir sin CEDI',
                 'val_ult':    'Valorizado Ult Costo sin CEDI',
                 'val_prom':   'Valorizado Promedio sin CEDI',
+                'sufijo':     ' sin CEDI',
             },
             {  # hoja TODO REST PUNTOS
                 'segmentos':  ['Pedir_NEPS_Capita sin PUNTOS', 'Pedir_NEPS_Evento sin PUNTOS', 'Pedir_FOMAG_Evento sin PUNTOS'],
@@ -703,8 +755,21 @@ class ProyeccionProcessor:
                 'total':      'Cantidad a Pedir sin PUNTOS',
                 'val_ult':    'Valorizado Ult Costo sin PUNTOS',
                 'val_prom':   'Valorizado Promedio sin PUNTOS',
+                'sufijo':     ' sin PUNTOS',
             },
         ]
+
+        canales_pend = (('Disp', 'Pendientes_Dispensacion', 'Rotacion_Dispensacion'),
+                        ('Com', 'Pendientes_Comercial', 'Rotacion_Remisiones'))
+
+        # Valorizado de SOLO el pendiente (igual en todas las variantes)
+        for canal, col_pend, _ in canales_pend:
+            df[f'Valorizado Pendientes {canal}'] = self._valorizar(df[col_pend], df.get('Ultimo Costo'),
+                                                                   df.get('Ultimo Costo'))
+
+        df['Pendientes Total'] = df['Pendientes_Dispensacion'] + df['Pendientes_Comercial']
+        df['Valorizado Pendientes Total'] = self._valorizar(df['Pendientes Total'], df.get('Ultimo Costo'),
+                                                            df.get('Ultimo Costo'))
 
         for v in variantes:
             # Dispensacion (segmentos + total de dispensacion) -> Rotacion_Dispensacion
@@ -720,8 +785,25 @@ class ProyeccionProcessor:
             df[v['total']] = (df[v['disp_total']] + df[v['remi']]).astype('int64')
 
             # Revalorizar sobre el total redondeado
-            df[v['val_ult']]  = self._valorizar(df[v['total']], df.get('Ultimo Costo'), df.get('Ultimo Costo'))
+            df[v['val_ult']] = self._valorizar(df[v['total']], df.get('Ultimo Costo'), df.get('Ultimo Costo'))
             df[v['val_prom']] = self._valorizar(df[v['total']], df.get('Costo Promedio'), df.get('Costo Promedio'))
+
+            # Cantidad a Pedir + pendiente de cada canal, redondeada con la rotacion
+            # del canal: A/M hacia arriba, B (y '-') hacia abajo
+            for canal, col_pend, col_rot in canales_pend:
+                col_cant = f"Cantidad a Pedir + Pend {canal}{v['sufijo']}"
+                df[col_cant] = self.redondear_por_empaque(df[v['total']] + df[col_pend], cantPas,
+                                                          df[col_rot], b_hacia_abajo=True)
+                df[f"Valorizado Cant + Pend {canal}{v['sufijo']}"] = self._valorizar(df[col_cant],
+                                                                                     df.get('Ultimo Costo'),
+                                                                                     df.get('Ultimo Costo'))
+                df[f"Estado + Pend {canal}{v['sufijo']}"] = np.where(df[col_cant] > 0, 'COMPRAR', 'NO COMPRAR')
+
+        base_cedi = df['Cantidad a Pedir sin CEDI']
+        df['Cant. a Pedir sin CEDI + Pend Total'] = (base_cedi + (df['Cantidad a Pedir + Pend Disp sin CEDI'] - base_cedi)
+                                                     + (df['Cantidad a Pedir + Pend Com sin CEDI'] - base_cedi))
+        df['Valorizado Cant sin CEDI + Pend Total'] = self._valorizar(df['Cant. a Pedir sin CEDI + Pend Total'], df.get('Ultimo Costo'),
+                                                                      df.get('Ultimo Costo'))
 
         df['Estado'] = np.where(df['Cantidad a Pedir'] > 0, 'COMPRAR', 'NO COMPRAR')
 
@@ -804,6 +886,7 @@ class ProyeccionProcessor:
         self.limpiar_datos()
         self._validar_datos()
         self.clasificar_segmentos()
+        self.excluir_codigos_neps()
         # Demanda mensual ponderada 50/30/20 (ultimos 3 meses),
         # calculada por canal porque cada uno alimenta su propio pedido.
         self.demanda_disp_mensual = self.calcular_ponderados(self.consumo_dispensacion)
@@ -968,6 +1051,19 @@ class ProyeccionProcessor:
             print(f"[OK] Stock Puntos Dispensación: Cuadre Exacto ({total_pts_original:,.0f} unidades)")
         else:
             print(f"[X] Stock Puntos Diferente. Orig: {total_pts_original:,.0f} | Proc: {total_pts_procesado:,.0f}")
+
+        # 4b. CUADRE PENDIENTES (lo que no cuadra son codigos que no estan en el Maestro)
+        for attr, col, nombre in (('pendientes_disp', 'Pendientes_Dispensacion', 'Pendientes Dispensación'),
+                                    ('pendientes_rem', 'Pendientes_Comercial', 'Pendientes Comercial')):
+            fuente = getattr(self, attr)
+            total_orig = fuente[col].sum()
+            total_proc = self.maestro_consumo[col].sum()
+            if round(total_orig - total_proc, 2) == 0:
+                print(f"[OK] {nombre}: Cuadre Exacto ({total_orig:,.0f} unidades)")
+            else:
+                fuera = sorted(set(fuente['Codigo']) - set(self.maestro['Codigo']))
+                print(f"[!] {nombre}: {total_orig - total_proc:,.0f} unidades de {len(fuera)} códigos "
+                        f"que no están en el Maestro: {', '.join(fuera[:10])}")
 
         # 5. BÚSQUEDA DE PRODUCTOS HUÉRFANOS
         codigos_maestro = set(self.maestro['Codigo'])

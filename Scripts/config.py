@@ -6,6 +6,8 @@ RUTA_REMISIONES = 'Datos/Remisiones/Rotacion_Remisiones_A_Julio.xlsx'
 RUTA_STOCK_BODEGA = 'Datos/Valorizados/Valorizado_CEDI_21-08-2026.xls'
 RUTA_STOCK_PUNTOS = 'Datos/Valorizado_Puntos/Valorizado_Puntos_21-08-2026.xls'
 RUTA_MOLECULAS = 'Datos/Molecula_Compra/Molecula_Compra_14-08-2026.xlsx'
+RUTA_PENDIENTES_DISP = 'Datos/Pendientes Dispensacion/Pendientes Dispensacion 28-09-2026.csv'
+RUTA_PENDIENTES_REM = 'Datos/Pendientes Comercial/Pendientes Comercial 28-09-2026.xls'
 DB_URL = os.environ.get("PROYECCION_DB_URL")
 
 APARTAR_ULTIMO_MES_VISUAL = True
@@ -23,6 +25,8 @@ DIAS_SEGURIDAD_REMI = 20
 #         M = hasta UMBRAL_M %      B = todo el resto
 UMBRAL_A = 80
 UMBRAL_M = 95
+PORCENTAJE_REDONDEO_EMPAQUE = 0.75
+CONTRATO_FOMAG_VIGENTE = 'PROV_FOMAG_2026'
 
 # --- Criterio de rotacion:  'volumen' (recomendado)  o  'formulas' (obsoleto).
 CRITERIO_ROTACION = 'volumen'
@@ -33,9 +37,12 @@ CRITERIO_ROTACION = 'volumen'
 CODIGOS_EXCLUIDOS_PREFIJOS = ('CONT','PR',)
 CODIGOS_EXCLUIDOS_EXACTOS = ('M99999',)
 CODIGOS_MATRIZ_RIESGO = ('M01856', 'M00658', 'M00743', 'M00555', 'M02769', 'M02872', 'M00358', 'M01880', 'M00955',
-                         'M01979', 'M01023', 'M02431' 'N00081', 'M00439', 'M03133', 'M02712', 'M00730', 'M00731',
+                         'M01979', 'M01023', 'M02431', 'N00081', 'M00439', 'M03133', 'M02712', 'M00730', 'M00731',
                          'N00002', 'M01070', 'M04052', 'M00149', 'M02418', 'DM00208', 'M01606', 'M00826', 'M03715',
                          'M01245', 'M00147', 'M01434', 'DM01472', 'DM00519', 'M00148', 'M03680', 'N00024','N00025')
+
+CODIGOS_EXCLUIDOS_NEPS = ('M02272', 'M02948', 'M03146', 'M03176')
+
 TEXTO_MATRIZ = ('CODIGO MATRIZ DE RIESGO')
 
 BODEGAS_ABASTECIMIENTO = {
@@ -82,27 +89,36 @@ BODEGAS_ABASTECIMIENTO = {
     '486': 'DISP. MENNAR PIAMONTE 1',
     '509': 'DISP. MENNAR 5',
     '524': 'DISP. MENNAR 2',
+    '433': 'DISP. MENNAR PURACE 1',
 }
 
 ZONAS_ABASTECIMIENTO = {
     'ZONA 1': [
-        '524','308','413','365','357',
-        '437','284','352','389','336',
-        '433',
+        '524', '475', '308', '413', '365',
+        '357', '385', '316', '437', '445',
+        '284', '352', '389', '336',
     ],
     'ZONA 2': [
-        '475','381','332','296','421',
-        '385','324','316','288','344',
-        '445',
+        '509', '395', '320', '292', '409',
+        '469', '332', '340', '421', '304',
+        '324', '369', '373', '300', '433',
     ],
     'ZONA 3': [
-        '509','395','320','292','409',
-        '469','340','304','369','373',
-        '300',
-    ],
-    'ZONA 4': [
-        '280','404','417','348','377',
-        '429','328','486','441','312',
-        '465',
+        '280', '404', '381', '296', '417',
+        '348', '377', '429', '328', '486',
+        '288', '344', '441', '312', '465',
     ]
+
+}
+
+GRUPOS_DISTANCIA_ABASTECIMIENTO = {
+    # 1 - Popayan
+    '280': 1, '524': 1, '475': 1, '509': 1,
+    # 2 - Cerca
+    '381': 2, '312': 2, '316': 2, '389': 2, '352': 2, '344': 2, '357': 2, '433': 2, '308': 2, '324': 2,
+    # 3 - Media
+    '369': 3, '469': 3, '421': 3, '465': 3, '332': 3, '284': 3, '336': 3, '377': 3, '365': 3, '288': 3,
+    '304': 3, '340': 3, '373': 3, '409': 3, '348': 3, '441': 3, '445': 3, '328': 3, '385': 3, '292': 3, '404': 3,
+    # 4 - Lejos
+    '320': 4, '486': 4, '437': 4, '395': 4, '413': 4, '429': 4, '417': 4, '296': 4, '300': 4,
 }

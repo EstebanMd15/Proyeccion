@@ -3,7 +3,7 @@ from fastapi import FastAPI, Request, File, UploadFile, Form
 from fastapi.templating import Jinja2Templates
 from datetime import date
 from fastapi.responses import StreamingResponse, JSONResponse
-from Scripts.main import cargar_datos, exportar_excel, leer_con_encabezado
+from Scripts.main import cargar_datos, exportar_excel, leer_con_encabezado, leer_csv_pipe
 from Scripts.processor import ProyeccionProcessor
 from fastapi.staticfiles import StaticFiles
 import uuid
@@ -34,6 +34,8 @@ def generar(request: Request,
         stock_bodega: UploadFile | None = File(None),
         stock_puntos: UploadFile | None= File(None),
         moleculas: UploadFile | None = File(None),
+        pend_disp: UploadFile | None = File(None),
+        pend_com: UploadFile | None = File(None),
         cob_disp_a: int = Form(...),
         cob_disp_m: int = Form(...),
         cob_disp_b: int = Form(...),
@@ -68,6 +70,8 @@ def generar(request: Request,
         datos = cargar_datos(
             maestro.file, dispensacion.file, remisiones.file, stock_bodega.file,
             stock_puntos.file, moleculas.file,
+            pend_disp.file if pend_disp and pend_disp.filename else None,
+            pend_com.file if pend_com and pend_com.filename else None,
         )
         proc = ProyeccionProcessor(
             *datos,
@@ -166,31 +170,40 @@ def descargar(download_id: str):
 @app.post("/abastecimiento/reparto")
 def abastecimiento_reparto(
         consumo: UploadFile | None = File(None),
-        recibidas: UploadFile | None = File(None),
+        cedi: UploadFile | None = File(None),
+        proyeccion: UploadFile | None = File(None),
         transito: UploadFile | None = File(None),
-        maestro: UploadFile | None = File(None),):
+        maestro: UploadFile | None = File(None),
+        cto_fomag: UploadFile | None = File(None),):
 
-    faltantes = [n for n, f in {"consumo": consumo, "recibidas": recibidas,
-                                "transito": transito, "maestro": maestro}.items()
+    faltantes = [n for n, f in {"consumo": consumo, "cedi": cedi, "proyeccion": proyeccion,
+                                "transito": transito, "maestro": maestro, 'cto_fomag': cto_fomag}.items()
                  if f is None or not f.filename]
     if faltantes:
         return JSONResponse({"error": "Faltan archivos: " + ", ".join(faltantes)}, status_code=400)
     try:
         df_consumo = pd.read_excel(consumo.file)
-        df_recibidas = leer_con_encabezado(recibidas.file, 'Cód Artículo')
+        df_cedi = leer_con_encabezado(cedi.file, 'Codigo Articulo')
+        df_todo = pd.read_excel(proyeccion.file, sheet_name='Todo REST CEDI', skiprows=1)
         df_transito = leer_con_encabezado(transito.file, 'Codigo')
         df_maestro = leer_con_encabezado(maestro.file, 'Codigo')
-
-        pedidos = abastecimiento.recibidas_desde_archivo(df_recibidas)
+        df_fomag = leer_csv_pipe(cto_fomag.file, 'Código Articulo', cols=['Nro. Contrato',
+                                                                          'Código Articulo', 'Estado Referencia', 'Codigo Padre', 'Código Cum.1'])
+        comerciales = abastecimiento.medicamentos_comerciales(df_maestro)
+        mol_map = abastecimiento.molecula_por_codigo(df_todo)
+        stock_cedi = abastecimiento.stock_cedi_desde_archivo(df_cedi)
+        pedidos = abastecimiento.pedidos_canal_desde_proyeccion(df_todo)
+        codigos_fomag = abastecimiento.codigos_fomag_desde_archivo(df_fomag, df_maestro, comerciales)
         trans = abastecimiento.transito_desde_archivo(df_transito)
         info = abastecimiento.info_producto_desde_maestro(df_maestro)
 
         buffer = io.BytesIO()
-        abastecimiento.generar_abastecimiento(df_consumo, pedidos, trans, info, buffer)
+        abastecimiento.generar_abastecimiento(df_consumo, stock_cedi, pedidos,
+                                              codigos_fomag, trans, info, buffer, mol_map, df_cedi, comerciales)
         buffer.seek(0)
     except Exception as e:
-        return JSONResponse({"error": "No se pudo generar el reparto. Revisa que los archivos sean "
-                                      "el Consumo, Recibidas, Tránsito y Maestro. (" + str(e) + ")"},
+        return JSONResponse({"error": "No se pudo generar el reparto. Revisa que los archivos sean el Consumo, "
+                                      "Valorizado CEDI, Proyección, Tránsito, Maestro y Contrato FOMAG. (" + str(e) + ")"},
                             status_code=400)
     return StreamingResponse(
         buffer,

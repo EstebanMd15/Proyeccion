@@ -15,16 +15,24 @@
                 <div class="dropzone"><input type="file" name="maestro" accept=".xls, .xlsx"></div>
             </div>
             <div class="campo">
-                <label>Archivo Consumo Abastecimiento</label>
+                <label>Consumo Abastecimiento</label>
                 <div class="dropzone"><input type="file" name="consumo" accept=".xls, .xlsx"></div>
             </div>
             <div class="campo">
-                <label>Archivo Traslados en Transito</label>
+                <label>Traslados en Transito</label>
                 <div class="dropzone"><input type="file" name="transito" accept=".xls, .xlsx"></div>
             </div>
             <div class="campo">
-                <label>Archivo Detallado Compras (Unidades Recibidas)</label>
-                <div class="dropzone"><input type="file" name="recibidas" accept=".xls, .xlsx"></div>
+                <label>Valorizado CEDI con Lotes</label>
+                <div class="dropzone"><input type="file" name="cedi" accept=".xls, .xlsx"></div>
+            </div>
+            <div class="campo">
+                <label>Excel Proyección</label>
+                <div class="dropzone"><input type="file" name="proyeccion" accept=".xls, .xlsx"></div>
+            </div>
+            <div class="campo">
+                <label>Contrato FOMAG</label>
+                <div class="dropzone"><input type="file" name="cto_fomag" accept=".csv, .txt"></div>
             </div>
         </div>
     </div>
@@ -44,7 +52,9 @@
     const archivos = {
         maestro: "Maestro",
         consumo: "Consumo Abastecimiento",
-        recibidas: "Cantidad Recibidas",
+        cedi: "Valorizado CEDI con Lotes",
+        proyeccion: "Excel Proyección",
+        cto_fomag: "Contrato FOMAG",
         transito: "Traslados en Tránsito",
     };
 
