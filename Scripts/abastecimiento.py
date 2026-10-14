@@ -130,6 +130,13 @@ def calcular_disponible(stock_cedi, pedidos, demanda):
     df['Pct_Comercial'] = np.where(total_ped > 0, df['Pedir_Rem'] / total_ped, 0.0)
     df['Reserva_Comercial'] = np.ceil(df['Stock_CEDI'] * df['Pct_Comercial']).astype('int64')
 
+    total_nec = df['Nec_Disp'] + df['Nec_Rem']
+    pct_nec = np.where(total_nec > 0, df['Nec_Rem'] / total_nec, 0.0)
+    reserva_nec = np.ceil(np.minimum(df['Stock_CEDI'] * pct_nec, df['Nec_Rem'])).astype('int64')
+    sin_reserva = (df['Pedir_Rem'] == 0) & (df['Nec_Rem'] > 0)
+    df['Pct_Comercial'] = np.where(sin_reserva, pct_nec, df['Pct_Comercial'])
+    df['Reserva_Comercial'] = np.where(sin_reserva, reserva_nec, df['Reserva_Comercial'])
+
     remanente = df['Stock_CEDI'] - df['Reserva_Comercial']
 
     df['Demanda'] = np.ceil(df['CODIGO'].map(demanda).fillna(0)).astype('int64')
@@ -522,10 +529,13 @@ def pedidos_canal_desde_proyeccion(df, col_codigo='Codigo'):
                                     errors='coerce').fillna(0),
         'Pedir_Rem': pd.to_numeric(df['Pedir Remisiones sin CEDI'],
                                    errors='coerce').fillna(0),
+        'Nec_Disp': pd.to_numeric(df['Necesidad_Disp'], errors='coerce').fillna(0),
+        'Nec_Rem': pd.to_numeric(df['Necesidad_Rem'], errors='coerce').fillna(0),
         'Rotacion_Disp': df['Rotacion_Dispensacion'].astype(str).str.strip(),
     })
     return out.groupby('CODIGO', as_index=False).agg(
         Pedir_Disp=('Pedir_Disp', 'sum'), Pedir_Rem=('Pedir_Rem', 'sum'),
+        Nec_Disp=('Nec_Disp', 'sum'), Nec_Rem=('Nec_Rem', 'sum'),
         Rotacion_Disp=('Rotacion_Disp', 'first'))
 
 def _cum_y_expediente(seire):
