@@ -174,7 +174,8 @@ def abastecimiento_reparto(
         proyeccion: UploadFile | None = File(None),
         transito: UploadFile | None = File(None),
         maestro: UploadFile | None = File(None),
-        cto_fomag: UploadFile | None = File(None),):
+        cto_fomag: UploadFile | None = File(None),
+        recibidos: UploadFile | None = File(None),):
 
     faltantes = [n for n, f in {"consumo": consumo, "cedi": cedi, "proyeccion": proyeccion,
                                 "transito": transito, "maestro": maestro, 'cto_fomag': cto_fomag}.items()
@@ -195,11 +196,14 @@ def abastecimiento_reparto(
         pedidos = abastecimiento.pedidos_canal_desde_proyeccion(df_todo)
         codigos_fomag = abastecimiento.codigos_fomag_desde_archivo(df_fomag, df_maestro, comerciales)
         trans = abastecimiento.transito_desde_archivo(df_transito)
+        rec = None
+        if recibidos is not None and recibidos.filename:
+            rec = abastecimiento.transito_desde_archivo(leer_con_encabezado(recibidos.file, 'Codigo'), recibidos=True)
         info = abastecimiento.info_producto_desde_maestro(df_maestro)
 
         buffer = io.BytesIO()
         abastecimiento.generar_abastecimiento(df_consumo, stock_cedi, pedidos,
-                                              codigos_fomag, trans, info, buffer, mol_map, df_cedi, comerciales)
+                                              codigos_fomag, trans, info, buffer, mol_map, df_cedi, comerciales, rec)
         buffer.seek(0)
     except Exception as e:
         return JSONResponse({"error": "No se pudo generar el reparto. Revisa que los archivos sean el Consumo, "
