@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Registro · Calidad{% endblock %}
+{% block nav_calidad %}activo{% endblock %}
+{% block content %}
+<h1>Toma de temperatura y humedad</h1>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% if ok %}<div class="exito">Lectura guardada. Código: {{ ok }}</div>{% endif %}
+<form method="post" action="/calidad/registro">
+
+  <div class="card">
+    <label>Responsable Toma</label>
+    <input type="text" name="responsable_toma" required placeholder="Nombre Responsable (Toma)">
+
+    <label>Responsable Verificación</label>
+    <input type="text" name="responsable_verifica" placeholder="Nombre Responsable (Verificación)">
+  </div>
+
+  <div class="card">
+    <label>Punto de Dispensación</label>
+    <select name="codigo_bodega" required>
+      {% for codigo, nombre in bodegas.items() %}
+        <option value="{{ codigo }}">{{ codigo }} - {{ nombre }}</option>
+      {% endfor %}
+    </select>
+
+    <label>Zona</label>
+    <select name="zona" id="zona" required>
+      {% for z in zonas %}
+        <option value="{{ z }}">{{ z }}</option>
+      {% endfor %}
+    </select>
+
+    <div id="bloque-frio">
+      <label>Temperatura nevera (°C)</label>
+      {% set r = rangos.nevera %}
+      <p class="rango">Conforme entre {{ r.alerta_min }} °C y {{ r.alerta_max }} °C.
+      Crítico si es menor a {{ r.min }} °C o mayor a {{ r.max }} °C</p>
+      <input type="number" step="0.1" name="temp_nevera" placeholder="Ej: 5">
+
+    </div>
+
+    <div id="bloque-ambiente">
+      <label>Temperatura ambiente (°C)</label>
+      {% set r = rangos.ambiente %}
+      <p class="rango">Conforme entre {{ r.alerta_min }} °C y {{ r.alerta_max }} °C.
+      Crítico si es menor a {{ r.min }} °C o mayor a {{ r.max }} °C</p>
+      <input type="number" step="0.1" name="temp_ambiente" placeholder="Ej: 22">
+
+      <label>Humedad relativa (%)</label>
+      {% set r = rangos.humedad %}
+      <p class="rango">Conforme entre {{ r.alerta_min }} % y {{ r.alerta_max }} %.
+      Crítico si es menor a {{ r.min }} % o mayor a {{ r.max }} %</p>
+      <input type="number" step="1" name="humedad" placeholder="Ej: 55">
+    </div>
+
+    <label>Verificación</label>
+    <select name="verificacion" id="verificacion">
+      <option value="SÍ">SÍ</option>
+      <option value="NO" selected>NO</option>
+    </select>
+
+    <label>Observaciones</label>
+    <textarea id="observaciones" name="observaciones" placeholder="(opcional)"></textarea>
+
+    <div class="row-botones">
+      <button type="submit">Guardar lectura</button>
+    </div>
+  </div>
+
+</form>
+
+<script>
+  const ZONAS_FRIO = {{ zonas_frio | tojson }};
+  const zona = document.getElementById('zona');
+
+  function alternarBloques(){
+    const esFrio = ZONAS_FRIO.includes(zona.value);
+    document.getElementById('bloque-frio').style.display = esFrio ? '': 'none';
+    document.getElementById('bloque-ambiente').style.display = esFrio ? 'none' : '';
+    document.querySelectorAll('#bloque-frio input').forEach(i => {
+      i.disabled = !esFrio; i.required = esFrio; });
+    document.querySelectorAll('#bloque-ambiente input').forEach(i => {
+      i.disabled = esFrio; i.required = !esFrio; });
+  }
+  zona.addEventListener('change', alternarBloques);
+  alternarBloques();
+</script>
+{% endblock %}

@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block nav_dashboard %}activo{% endblock %}
+{% block content %}
+
+<h1>Dashboard Registro Temperatura</h1>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+<form method="get">
+    <label>Fecha</label>
+    <input type="date" name="fecha" value="{{ fecha.isoformat() }}" onchange="this.form.submit()">
+</form>
+
+<div class="row">
+    {% for j in jornadas %}
+    <div class="card">
+        <h2>{{ j }}</h2>
+        {% for estado, n in conteo[j].items() %}
+        <div class="stat">
+            <span class="stat-label">{{ estado }}</span>
+            <span class="stat-value">{{ n }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+
+{% set CLASE = {"CONFORME": "est-ok", "PREVENTIVO": "est-alerta", "CRITICO": "est-critico", "PENDIENTE": "est-pendiente"} %}
+{% set CLASE_EQ = {"AL DIA": "est-ok", "POR VENCER": "est-alerta", "VENCIDO": "est-critico", "SIN REGISTRO": "est-pendiente", "SIN DATOS": "est-pendiente"} %}
+<div class="card tabla-scroll">
+  <table class="tabla-calidad">
+    <thead>
+        <tr>
+            <th>Punto</th>
+            {% for j in jornadas %}
+            <th>{{ j }}</th>
+            {% endfor %}
+            <th>Equipos</th>
+        </tr>
+    </thead>
+    <tbody>
+      {% for f in filas %}
+      <tr>
+        <td>{{ f.codigo }} - {{ f.punto }}</td>
+        {% for j in jornadas %}
+        <td><span class="estado {{ CLASE[f[j]] }}">{{ f[j] }}</span></td>
+        {% endfor %}
+        <td><span class="estado {{ CLASE_EQ[f.Equipos] }}">{{ f.Equipos }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if alertas %}
+<div class="card tabla-scroll">
+    <table>
+        <thead>
+            <tr>
+                <th>Punto</th>
+                <th>Jornada</th>
+                <th>Hora</th>
+                <th>Zona</th>
+                <th>Valor Medio</th>
+                <th>Estado</th>
+                <th>Observaciones</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for a in alertas %}
+            <tr>
+                <td>{{ a["Código de Bodega"] }} - {{ a["Punto de Dispensación"] }}</td>
+                <td>{{ a["Jornada"] }}</td>
+                <td>{{ a["Hora"] }}</td>
+                <td>{{ a["Zona"] }}</td>
+                <td>Nev {{ a["Temp. Nevera (°C)"] }} - Amb {{ a["Temp. Ambiente (°C)"] }} -
+                    Hum {{ a["Humedad (%)"] }}</td>
+                <td><span class="estado {{ CLASE[a["Estado"]] }}">{{ a["Estado"] }}</span></td>
+                <td>{{ a["Observaciones / Acciones correctivas"] }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card">
+    <p class="sin-datos">Sin alertas para esta fecha.</p>
+</div>
+{% endif %}
+{% endblock %}

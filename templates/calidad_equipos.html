@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %} Equipos · Calidad {% endblock %}
+{% block nav_equipos %}activo{% endblock %}
+{% block content %}
+
+{% macro tabla_equipos(titulo, tipo, cantidad) %}
+    <div class="card">
+        <h2>{{titulo}}</h2>
+        <table class="tabla-calidad tabla-equipos">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>N° Serie o Código</th>
+                    <th>Fecha de calibración</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for i in range (1, cantidad + 1) %}
+                {% set serie = tipo ~ "_SERIE_" ~ i %}
+                {% set calib = tipo ~ "_CALIB_" ~ i %}
+            <tr>
+                <td>{{ i }}</td>
+                <td>
+                    <input type="text" name="{{ serie }}" value="{{ valores.get(serie, '') }}">
+                </td>
+                <td>
+                    <input type="date" name="{{ calib }}" value="{{ valores.get(calib, '') }}">
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endmacro %}
+
+<h1>Equipos de medición</h1>
+{% if ok == "error" %}<div class="error">No se pudo guardar en Google Sheets. Intente de nuevo.</div>
+{% elif ok %}<div class="exito">Equipo guardado</div>{% endif %}
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+<div class="card">
+  <label>Punto de Dispensación</label>
+  <select onchange="location.href='/calidad/equipos?codigo=' + this.value">
+    <option value="">Seleccione un punto…</option>
+    {% for c, nombre in bodegas.items() %}
+      <option value="{{ c }}" {% if c == codigo %}selected{% endif %}>{{ c }} - {{ nombre }}</option>
+    {% endfor %}
+  </select>
+  {% if codigo in bodegas %}
+    {% if registrado %}<span class="estado est-ok">Equipos registrados</span>
+    {% else %}<span class="estado est-alerta">Equipos pendientes</span>{% endif %}
+  {% endif %}
+</div>
+
+{% if codigo in bodegas %}
+<form method="post" action="/calidad/equipos">
+  <input type="hidden" name="codigo_bodega" value="{{ codigo }}">
+  {{ tabla_equipos("Termómetros · Cadena de frío", "TERMOMETRO", max_termometros) }}
+  {{ tabla_equipos("Termohigrómetros · Ambiente y humedad", "TERMOHIGRO", max_termohigros) }}
+  <div class="row-botones"><button type="submit">Guardar equipos</button></div>
+</form>
+{% endif %}
+{% endblock %}

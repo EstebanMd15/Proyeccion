@@ -8,10 +8,11 @@ from Scripts.processor import ProyeccionProcessor
 from fastapi.staticfiles import StaticFiles
 import uuid
 import pandas as pd
-from Scripts import db, abastecimiento
+from Scripts import db, abastecimiento, calidad_temp
 
 
 app = FastAPI()
+app.include_router(calidad_temp.router)
 resultados = {}
 MAX_RESULTADOS = 20   # dashboards guardados en memoria; al pasarse se descartan los mas viejos
 app.mount("/static", StaticFiles(directory="static"), name="static")

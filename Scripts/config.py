@@ -1,4 +1,5 @@
 import os
+import datetime
 
 RUTA_MAESTRO = 'Datos/Maestras/ListaArticulos_31-08-2026.xls'
 RUTA_DISPENSACION = 'Datos/Dispensacion/ROTACION CON AGOSTO - PRUEBA.xlsx'
@@ -9,6 +10,84 @@ RUTA_MOLECULAS = 'Datos/Molecula_Compra/Molecula_Compra_14-08-2026.xlsx'
 RUTA_PENDIENTES_DISP = 'Datos/Pendientes Dispensacion/Pendientes Dispensacion 28-09-2026.csv'
 RUTA_PENDIENTES_REM = 'Datos/Pendientes Comercial/Pendientes Comercial 28-09-2026.xls'
 DB_URL = os.environ.get("PROYECCION_DB_URL")
+
+CALIDAD_HOJA_LECTURAS = "BD_LECTURAS"
+CALIDAD_HOJA_EQUIPOS = "BD_EQUIPOS"
+CALIDAD_CACHE_SEGUNDOS = 120
+CALIDAD_ID_SHEETS = os.environ.get("CALIDAD_SHEET_ID")
+CALIDAD_CRENDENCIALES = os.environ.get("CALIDAD_CREDENCIALES")
+CALIDAD_RANGOS = {
+    "nevera": {"min": 2.0, "max": 8.0, "alerta_min": 3.0, "alerta_max": 6.5},
+    "ambiente": {"min": 15.0, "max": 30.0, "alerta_min": 17.0, "alerta_max": 28.0},
+    "humedad": {"min": 40, "max": 75, "alerta_min": 45, "alerta_max": 70},
+
+}
+CALIDAD_JORNADAS = {
+    "Mañana": (datetime.time(9,0), datetime.time(10,0)),
+    "Tarde": (datetime.time(15,0), datetime.time(16,0))
+}
+CALIDAD_ZONAS_FRIO = ("Nevera Medicamentos", "Cuarto Frío (Aplica solo CEDI)")
+CALIDAD_VALIDAR_HORARIO = True
+CALIDAD_ZONAS = (
+    "Área de Dispensación Principal",
+    "Bodega / Almacenamiento",
+    "Recepción Técnica",
+    "Nevera Medicamentos",
+    "Cuarto Frío (Aplica solo CEDI)",
+)
+CALIDAD_BODEGAS = {
+    "495": "BODEGA PRINCIPAL CEDI",
+    '280': 'DISP. MENNAR 1',
+    '284': 'DISP. MENNAR SANTANDER 1',
+    '288': 'DISP. MENNAR PUERTO TEJADA 1',
+    '292': 'DISP. MENNAR BOLIVAR 1',
+    '296': 'DISP. MENNAR GUAPI 1',
+    '300': 'DISP. MENNAR TIMBIQUI 1',
+    '304': 'DISP. MENNAR MIRANDA 1',
+    '308': 'DISP. MENNAR EL TAMBO 1',
+    '312': 'DISP. MENNAR TIMBIO 1',
+    '316': 'DISP. MENNAR PIENDAMO 1',
+    '320': 'DISP. MENNAR ARGELIA 1',
+    '324': 'DISP. MENNAR MORALES 1',
+    '328': 'DISP. MENNAR PATIA 1',
+    '332': 'DISP. MENNAR CALOTO 1',
+    '336': 'DISP. MENNAR VILLA RICA 1',
+    '340': 'DISP. MENNAR CORINTO 1',
+    '344': 'DISP. MENNAR ROSAS 1',
+    '348': 'DISP. MENNAR LA VEGA 1',
+    '352': 'DISP. MENNAR SOTARA 1',
+    '357': 'DISP. MENNAR LA SIERRA 1',
+    '365': 'DISP. MENNAR GUACHENE 1',
+    '369': 'DISP. MENNAR SILVIA 1',
+    '373': 'DISP. MENNAR SUAREZ 1',
+    '377': 'DISP. MENNAR PADILLA 1',
+    '381': 'DISP. MENNAR CAJIBIO 1',
+    '385': 'DISP. MENNAR MERCADERES 1',
+    '389': 'DISP. MENNAR TOTORO 1',
+    '395': 'DISP. MENNAR ALMAGUER 1',
+    '404': 'DISP. MENNAR BALBOA 1',
+    '409': 'DISP. MENNAR BUENOS AIRES 1',
+    '413': 'DISP. MENNAR FLORENCIA 1',
+    '417': 'DISP. MENNAR INZA 1',
+    '421': 'DISP. MENNAR JAMBALO 1',
+    '429': 'DISP. MENNAR PAEZ 1',
+    '437': 'DISP. MENNAR SAN SEBASTIAN 1',
+    '441': 'DISP. MENNAR SUCRE 1',
+    '445': 'DISP. MENNAR SANTA ROSA 1',
+    '465': 'DISP. MENNAR TORIBIO 1',
+    '469': 'DISP. MENNAR CALDONO 2',
+    '475': 'DISP. MENNAR 4',
+    '486': 'DISP. MENNAR PIAMONTE 1',
+    '509': 'DISP. MENNAR 5',
+    '524': 'DISP. MENNAR 2',
+    '433': 'DISP. MENNAR PURACE 1',
+}
+
+CALIDAD_MAX_TERMOMETROS = 15
+CALIDAD_MAX_TERMOHIGROMETROS = 20
+CALIDAD_VIGENCIA_CALIBRACION_DIAS = 365
+CALIDAD_AVISO_CALIBRACION_DIAS = 30
+
 
 APARTAR_ULTIMO_MES_VISUAL = True
 

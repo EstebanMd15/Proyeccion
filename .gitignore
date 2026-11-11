@@ -16,3 +16,16 @@ proyeccion_con_rotacion.xlsx
 
 # Temporales de Microsoft Office (archivos abiertos)
 ~$*
+
+# Credenciales (la cuenta de servicio vive en C:\credenciales, pero por si acaso)
+*.json.key
+credenciales/
+motor-calidad*.json
+
+# graphify: se versionan graph.json, graph.html y GRAPH_REPORT.md; lo demas es cache local
+graphify-out/cache/
+graphify-out/20*/
+graphify-out/.graphify_*
+graphify-out/manifest.json
+graphify-out/cost.json
+.claude/skills/graphify/references/
