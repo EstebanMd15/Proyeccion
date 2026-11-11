@@ -70,30 +70,20 @@ input, select {
     text-transform: uppercase;
     color: var(--blue)
 }
+.card h3{
+    margin-top: 0;
+    font-size: 18px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    align-items: center;
+    color: var(--text)
+}
 .row {
     display: flex;
     gap: 20px;
 }
 .row .card {
     flex: 1;
-}
-.card-modelo {
-    cursor: pointer;
-    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-.card-modelo:hover {
-    transform: translateY(-4px) scale(1.02);
-    border-color: var(--green);
-    box-shadow: 0 6px 20px rgba(63, 185, 80, 0.25);
-}
-.card-modelo.activa {
-    border-color: var(--green);
-    box-shadow: 0 0 0 1px var(--green), 0 0 18px rgba(63, 185, 80, 0.25);
-}
-.ayuda {
-    color: var(--muted);
-    font-size: 14px;
-    margin: 4px 0 0;
 }
 button {
     margin-top: 24px;
@@ -170,7 +160,7 @@ input[type="number"]{
 }
 .stat-label {
     color: var(--muted);
-    font-size: 14px;
+    font-size: 16px;
 }
 .stat-value {
     font-family: 'Cascadia Code', Consolas, monospace;
@@ -178,11 +168,34 @@ input[type="number"]{
     font-weight: 600;
     color: var(--green);
 }
+.texto-2 {
+    display: flex;
+    align-items:center;
+    gap: 10px;
+    margin: 22px 0 4px;
+    font-family: 'Cascadia Code', Consolas, monospace;
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--amber);
+}
+.texto-2::before {
+    content: "//";
+    opacity: 0.7;
+}
+.texto-2::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--amber), transparent);
+    opacity: 0.5;
+}
 table {
     width: 100%;
     border-collapse: collapse;
 }
-th. td {
+th, td {
     text-align: left;
     padding: 10px 12px;
     border-bottom: 1px solid var(--border);

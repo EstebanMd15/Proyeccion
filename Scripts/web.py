@@ -114,29 +114,33 @@ def generar(request: Request,
     ]
 
     tarjetas = []
-    proveedores = []   # una tabla de proveedores por modelo, en el mismo orden que las tarjetas
+    val_pend_total = df['Valorizado Pendientes Total'].sum()
+    pendientes = {
+        "pend_com": f"{int(df['Pendientes_Comercial'].sum()):,}",
+        "val_pend_com": f"{df['Valorizado Pendientes Com'].sum():,.0f}",
+        "pend_disp": f"{int(df['Pendientes_Dispensacion'].sum()):,}",
+        "val_pend_disp": f"{df['Valorizado Pendientes Disp'].sum():,.0f}",
+        "pend_total": f"{int(df['Pendientes Total'].sum()):,}",
+        "val_pend_total": f"{val_pend_total:,.0f}",
+
+    }
     for titulo, col_ult, col_prom, col_und in modelos:
+        ult = df[col_ult].sum()
+        prom = df[col_prom].sum()
         tarjetas.append({
             "titulo": titulo,
             "ult": f"{df[col_ult].sum():,.0f}",
             "prom": f"{df[col_prom].sum():,.0f}",
             "und": f"{int(df[col_und].sum()):,}",
+            "tot_ult": f"{ult + val_pend_total:,.0f}",
+            "tot_prom": f"{prom + val_pend_total:,.0f}",
+            **pendientes,
         })
-        top = (df.groupby("Nombre Ult Proveedor")
-               .agg(costo=(col_ult, "sum"), unidades=(col_und, "sum"))
-               .sort_values("costo", ascending=False))
-        top = top[top["costo"] > 0]   # ocultar proveedores sin compra en este modelo
-        proveedores.append([
-            {"Proveedor": prov,
-             "costo": f"{fila.costo:,.0f}",
-             "unidades": f"{int(fila.unidades):,}"}
-            for prov, fila in top.iterrows()
-        ])
+
     download_id = uuid.uuid4().hex
     resultados[download_id] = {
         "excel": buffer.getvalue(),
         "tarjetas": tarjetas,
-        "proveedores": proveedores,
     }
     # No dejar crecer la memoria sin limite: descartar los dashboards mas viejos.
     while len(resultados) > MAX_RESULTADOS:
@@ -152,7 +156,6 @@ def dashboard(request: Request, download_id: str):
         })
     return templates.TemplateResponse(request, "resultado.html", {
         "tarjetas": data["tarjetas"],
-        "proveedores": data["proveedores"],
         "download_id": download_id,
     })
 @app.get("/descargar/{download_id}")

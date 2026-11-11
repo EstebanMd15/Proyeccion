@@ -7,10 +7,9 @@
 </head>
 <body>
     <h1>Resultados</h1>
-    <p class="ayuda">Haz clic en una tarjeta para ver sus proveedores.</p>
     <div class="row">
         {% for t in tarjetas %}
-        <div class="card card-modelo{% if loop.index0 == 0 %} activa{% endif %}" data-idx="{{ loop.index0 }}">
+        <div class="card">
             <h2>{{ t.titulo}}</h2>
             <div class="stat">
                 <span class="stat-label">Valorizado (ult. costo)</span>
@@ -24,74 +23,48 @@
                 <span class="stat-label">Unidades a Pedir</span>
                 <span class="stat-value">{{ t.und }}</span>
             </div>
+            <h3>
+                <span class="texto-2">Pendientes</span>
+            </h3>
+            <div class="stat">
+                <span class="stat-label">Pendientes Comercial</span>
+                <span class="stat-value">{{ t.pend_com }}</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Valorizado Pend. Comercial</span>
+                <span class="stat-value">${{ t.val_pend_com }}</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Pendientes Dispensación</span>
+                <span class="stat-value">{{ t.pend_disp }}</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Valorizado Pend. Dispensación</span>
+                <span class="stat-value">${{ t.val_pend_disp }}</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Pendientes Total</span>
+                <span class="stat-value">{{ t.pend_total }}</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Valorizado Pend. Total</span>
+                <span class="stat-value">${{ t.val_pend_total }}</span>
+            </div>
+            <h3>
+                <span class="texto-2">Totalizado</span>
+            </h3>
+            <div class="stat">
+                <span class="stat-label">Total Ult. Costo</span>
+                <span class="stat-value">${{ t.tot_ult }}</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Total Cost. Promedio</span>
+                <span class="stat-value">${{ t.tot_prom }}</span>
+            </div>
+
         </div>
         {% endfor %}
     </div>
-<div class="card">
-        <h2>Proveedores &mdash; <span id="modelo-activo">{{ tarjetas[0].titulo }}</span></h2>
-        <input type="text" id="buscador" placeholder="Buscar Proveedor...">
-    <div class="tabla-scroll">
-        <table>
-            <thead>
-            <tr>
-                <th>Proveedor</th>
-                <th>Valorizado</th>
-                <th>Unidades</th>
-            </tr>
-            </thead>
-            <tbody id="cuerpo-proveedores">
-            {% for p in proveedores[0] %}
-            <tr>
-                <td>{{ p.Proveedor }}</td>
-                <td>${{ p.costo }}</td>
-                <td>{{ p.unidades }}</td>
-            </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
     <a href="/descargar/{{ download_id }}"><button type="button">Descargar Excel</button></a>
-<script>
-    const proveedores = {{ proveedores|tojson }};
-    const cuerpo = document.getElementById("cuerpo-proveedores");
-    const buscador = document.getElementById("buscador");
-    const modeloActivo = document.getElementById("modelo-activo");
-
-    function filtrar() {
-        const texto = buscador.value.toLowerCase();
-        cuerpo.querySelectorAll("tr").forEach((fila) => {
-            const nombre = fila.querySelector("td").textContent.toLowerCase();
-            fila.style.display = nombre.includes(texto) ? "" : "none";
-        });
-    }
-
-    function pintar(idx) {
-        cuerpo.innerHTML = "";
-        proveedores[idx].forEach((p) => {
-            const tr = document.createElement("tr");
-            const nombre = document.createElement("td");
-            nombre.textContent = p.Proveedor;
-            const costo = document.createElement("td");
-            costo.textContent = "$" + p.costo;
-            const unidades = document.createElement("td");
-            unidades.textContent = p.unidades;
-            tr.append(nombre, costo, unidades);
-            cuerpo.appendChild(tr);
-        });
-        filtrar();
-    }
-
-    buscador.addEventListener("input", filtrar);
-
-    document.querySelectorAll(".card-modelo").forEach((card) => {
-        card.addEventListener("click", () => {
-            document.querySelectorAll(".card-modelo").forEach((c) => c.classList.remove("activa"));
-            card.classList.add("activa");
-            modeloActivo.textContent = card.querySelector("h2").textContent;
-            pintar(Number(card.dataset.idx));
-        });
-    });
-</script>
 </body>
 </html>

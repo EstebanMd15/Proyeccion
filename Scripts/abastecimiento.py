@@ -7,10 +7,12 @@ from openpyxl.styles import PatternFill
 from Scripts.config import CONTRATO_FOMAG_VIGENTE
 
 _CHARS_ILEGALES = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F]')
-COLORES_PUNTO = ['89A482', 'FFFF00', 'BDD7EE', 'C6E0B4', 'F8CBAD', '76C0EC']
 COLORES_ESTADO = {'SE ENVIA': 'D9EAD3', 'NO SE ENVIA': 'FF9B9B', 'SIN STOCK': 'FFE699', 'SIN ROTACIÓN': 'D9D9D9'}
 MESES_ES = {'01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr', '05': 'May', '06': 'Jun',
             '07': 'Jul', '08': 'Ago', '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dic'}
+# Columnas del Maestro con las marcas S/N y el nombre con el que salen en el Excel
+MARCAS_MAESTRO = {'Refrigerado?': 'Cadena de Frío', 'Medicamento de alto costo': 'Alto Costo',
+                  'Restringido o controlado': 'MCE'}
 
 def _limpiar(d):
     d = d.copy()
@@ -200,18 +202,6 @@ def _hoja_lotes(asignacion):
     h = h[[c for c in cols if c in h.columns]]
     return h.sort_values(['CODIGO', 'Grupo', 'Vence']).reset_index(drop=True)
 
-def pintar_puntos(ws, bodegas):
-    bodegas = [str(b) for b in bodegas]
-    relleno = {}
-    for celda in ws[1]:
-        punto = next((t for t in str(celda.value).split() if t in bodegas), None)
-        if punto is None:
-            continue
-        if punto not in relleno:
-            color = COLORES_PUNTO[len(relleno) % len(COLORES_PUNTO)]
-            relleno[punto] = PatternFill(fill_type='solid', start_color=color, end_color=color)
-        celda.fill = relleno[punto]
-
 def pintar_estado(ws):
     relleno = {e: PatternFill(fill_type='solid', start_color=c, end_color=c) for e,c in COLORES_ESTADO.items()}
     cols_estado = [c.column for c in ws[1] if str(c.value).startswith('Estado')]
@@ -255,8 +245,12 @@ def hoja_consumos(df, codigos_fomag, info, col_periodo='PERIODO', col_codigo='CO
     ['Demanda Mensual', 'Demanda NUEVA EPS', 'Demanda FOMAG'])
     return h[cols].sort_values([col_codigo, 'Demanda Mensual'], ascending=[True, False]).reset_index(drop=True)
 
-def exportar(matriz, matriz_zonas, matriz_transito,
-             matriz_enviado, necesidad, tabla_pesos,
+def poner_filtro(ws):
+    """Filtro en los encabezados y encabezado fijo, para filtrar por punto, zona o código."""
+    ws.auto_filter.ref = ws.dimensions
+    ws.freeze_panes = 'A2'
+
+def exportar(matriz, matriz_transito, rep, enviado, pesos, disp, info, tabla_pesos,
              reservas, asignacion, consumos, ruta):
 
     renombres = {cod: f'{cod} - {suc}' for cod, suc in config.BODEGAS_ABASTECIMIENTO.items()}
@@ -265,12 +259,13 @@ def exportar(matriz, matriz_zonas, matriz_transito,
         _limpiar(matriz).rename(columns=renombres).to_excel(writer, sheet_name='Global', index=False)
         _limpiar(matriz_transito).rename(columns=renombres).to_excel(writer, sheet_name='Tránsito', index=False)
         for zona, bodegas in config.ZONAS_ABASTECIMIENTO.items():
-            sub = _limpiar(matriz_por_zona(matriz_zonas, matriz_enviado, necesidad, bodegas))
-            sub.rename(columns=renombres).to_excel(writer, sheet_name=zona[:31], index=False)
-            pintar_puntos(writer.sheets[zona[:31]], bodegas)
+            sub = _limpiar(hoja_zona(consumos, rep, enviado, pesos, disp, info, bodegas))
+            sub.to_excel(writer, sheet_name=zona[:31], index=False)
             pintar_estado(writer.sheets[zona[:31]])
+            poner_filtro(writer.sheets[zona[:31]])
         _limpiar(_hoja_lotes(asignacion)).to_excel(writer, sheet_name='Lotes', index=False)
         _limpiar(consumos).to_excel(writer, sheet_name='Consumos', index=False)
+        poner_filtro(writer.sheets['Consumos'])
         tabla_pesos.to_excel(writer, sheet_name='Pesos', index=False)
     return ruta
 
@@ -446,18 +441,12 @@ def generar_abastecimiento(df_prescrita,stock_cedi, pedidos,
     rep = asignacion.groupby(['CODIGO', 'CODIGO BODEGA'], as_index=False)['Unidades'].sum()
     matriz = construir_matriz(rep)  # matriz ancha (ordenada por consumo)
     matriz_transito = construir_matriz_transito(transito, matriz, info)  # hoja Tránsito (mismo orden)
-    matriz_enviado = construir_matriz_transito(enviado.rename(columns={'Enviado': 'Transito'}), matriz,
-                                               info)  # zonas: tránsito + recibido
     transito_total = transito.groupby('CODIGO')['Transito'].sum()  # total en tránsito por código
     matriz = enriquecer_matriz(matriz, info, transito_total)  # + info + comentario + Total Tránsito
-    rep_zonas = pd.concat([rep, enviado[['CODIGO', 'CODIGO BODEGA']].assign(Unidades=0)], ignore_index=True)
-    matriz_zonas = enriquecer_matriz(construir_matriz(rep_zonas), info, transito_total)
-    necesidad = pesos.pivot_table(index='CODIGO', columns='CODIGO BODEGA', values='Ponderado', aggfunc='sum',
-                                  fill_value=0)
     tabla = hoja_pesos(pond)
     reservas = construir_reservas(disp, rep, info)
     consumos = hoja_consumos(df_prescrita, codigos_fomag, info)
-    return exportar(matriz, matriz_zonas, matriz_transito, matriz_enviado, necesidad, tabla, reservas, asignacion,
+    return exportar(matriz, matriz_transito, rep, enviado, pesos, disp, info, tabla, reservas, asignacion,
                     consumos, ruta)
 
 def stock_cedi_desde_archivo(df, col_codigo='Codigo Articulo', col_cantidad='Unidades'):
@@ -480,10 +469,14 @@ def restar_transito(rep, transito, col_valor='Unidades'):
 
 def info_producto_desde_maestro(maestro, col_codigo='Codigo'):
     cols = ['Nombre', 'Presentación', 'Grupo', 'Pastillas', 'Nombre Comercial', 'Ultimo Costo']
-    info = maestro[[col_codigo] + cols].copy()
+    info = maestro[[col_codigo] + cols + list(MARCAS_MAESTRO)].copy()
     # Normalizar el código igual que en el motor y renombrarlo a CODIGO
     info[col_codigo] = info[col_codigo].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
-    info = info.rename(columns={col_codigo: 'CODIGO', 'Nombre': 'Descripción'})
+    # Marcas en S/N: S si el Maestro trae SI / S / X / 1 / VERDADERO; vacío o cualquier otro valor es N
+    for c in MARCAS_MAESTRO:
+        v = info[c].astype(str).str.strip().str.upper()
+        info[c] = np.where(v.str.startswith('S') | v.isin(['X', '1', '1.0', 'TRUE', 'VERDADERO']), 'S', 'N')
+    info = info.rename(columns={col_codigo: 'CODIGO', 'Nombre': 'Descripción', **MARCAS_MAESTRO})
     info = info.drop_duplicates(subset='CODIGO', keep='first')
     return info
 
@@ -529,33 +522,49 @@ def enriquecer_matriz(matriz, info, transito_total, col_codigo='CODIGO'):
 #
 #     return sub[cols_final]
 
-def matriz_por_zona(matriz, matriz_enviado, necesidad, bodegas_zona, col_codigo='CODIGO'):
-    todas = list(config.BODEGAS_ABASTECIMIENTO.keys())
-    extras = ['Total control', 'Total Tránsito']
-    fijas = [c for c in matriz.columns if c not in todas and c not in extras]
-    cols_zona = [b for b in matriz.columns if b in set(bodegas_zona)]
+def hoja_zona(consumos, rep, enviado, pesos, disp, info, bodegas_zona, col_codigo='CODIGO', col_bodega='CODIGO BODEGA'):
+    """Hoja de zona con la estructura de Consumos: una fila por código + punto de la zona, con los meses de consumo,
+    la demanda, el stock del CEDI para repartir, lo enviado, la necesidad, el sugerido y el estado."""
+    llaves = [col_codigo, col_bodega]
+    bodegas_zona = [str(b) for b in bodegas_zona]
 
-    # Enviado (tránsito + recibido) y necesidad pendiente de cada código en las bodegas de la zona
-    env = (matriz_enviado.set_index(col_codigo).reindex(columns=cols_zona)
-           .reindex(matriz[col_codigo]).fillna(0).astype('int64'))
-    env.index = matriz.index
-    nec = np.rint(necesidad.reindex(columns=cols_zona).reindex(matriz[col_codigo]).fillna(0)).astype('int64')
-    nec.index = matriz.index
+    # Todas las combinaciones código + punto: con consumo, con sugerido (incluye las que cubre la molécula),
+    # con enviado o con necesidad, aunque no se les envíe nada
+    filas = pd.concat([consumos[llaves], rep[llaves], enviado[llaves], pesos[llaves]], ignore_index=True)
+    filas = filas[filas[col_bodega].isin(bodegas_zona)].drop_duplicates().reset_index(drop=True)
 
-    partes = [matriz[fijas]]
-    for b in cols_zona:
-        # Se envía: hay cantidad por despachar. Sin stock: aún le falta y no hay. No se envía: lo enviado ya lo cubre
-        estado = np.where(matriz[b] > 0, 'SE ENVIA',
-                          np.where(nec[b] > 0, 'SIN STOCK', np.where(env[b] > 0, 'NO SE ENVIA', 'SIN ROTACIÓN')))
-        partes.append(pd.DataFrame(
-            {f'Sugerido {b} - {config.BODEGAS_ABASTECIMIENTO[b]}': matriz[b], f'Enviado {b}': env[b],
-             f'Necesidad {b}': nec[b],
-             f'Estado {b}': estado}, index=matriz.index))
-    sub = pd.concat(partes, axis=1)
-    sub['Total Necesita'] = nec.sum(axis=1)
-    sub['Total zona'] = matriz[cols_zona].sum(axis=1)
-    sub['Total Enviado'] = env.sum(axis=1)
-    return sub[(sub['Total zona'] > 0) | (sub['Total Enviado'] > 0)]
+    cons = consumos.drop(columns=['Descripción', 'Sucursal', 'Zona'], errors='ignore')
+    cols_consumo = [c for c in cons.columns if c not in llaves]
+    sug = rep.groupby(llaves, as_index=False)['Unidades'].sum().rename(columns={'Unidades': 'Sugerido'})
+    env = enviado.groupby(llaves, as_index=False)['Enviado'].sum()
+    nec = pesos.groupby(llaves, as_index=False)['Ponderado'].sum().rename(columns={'Ponderado': 'Necesidad'})
+
+    h = (filas.merge(cons, on=llaves, how='left').merge(sug, on=llaves, how='left')
+         .merge(env, on=llaves, how='left').merge(nec, on=llaves, how='left'))
+    h[cols_consumo] = h[cols_consumo].fillna(0)
+    h['Sugerido'] = h['Sugerido'].fillna(0).astype('int64')
+    h['Enviado'] = h['Enviado'].fillna(0).astype('int64')
+    h['Necesidad'] = np.rint(h['Necesidad'].fillna(0)).astype('int64')
+
+    zona = {b: z for z, bodegas in config.ZONAS_ABASTECIMIENTO.items() for b in bodegas}
+    h['Sucursal'] = h[col_bodega].map(config.BODEGAS_ABASTECIMIENTO)
+    h['Zona'] = h[col_bodega].map(zona)
+
+    # Stock del CEDI que quedó para repartir después de la Reserva Comercial (se repite por código, no se suma)
+    stock = disp.set_index(col_codigo)['Stock_CEDI'] - disp.set_index(col_codigo)['Reserva_Comercial']
+    h['Stock CEDI'] = h[col_codigo].map(stock).fillna(0).astype('int64')
+
+    # Se envía: hay cantidad por despachar. Sin stock: aún le falta y no hay. No se envía: lo enviado ya lo cubre
+    h['Estado'] = np.where(h['Sugerido'] > 0, 'SE ENVIA',
+                           np.where(h['Necesidad'] > 0, 'SIN STOCK',
+                                    np.where(h['Enviado'] > 0, 'NO SE ENVIA', 'SIN ROTACIÓN')))
+
+    h['Comentario'] = np.where(h[col_codigo].isin(set(config.CODIGOS_MATRIZ_RIESGO)), config.TEXTO_MATRIZ, '')
+    h = h.merge(info, on=col_codigo, how='left')
+    info_cols = [c for c in info.columns if c != col_codigo]
+    cols = ([col_codigo] + info_cols + ['Comentario', col_bodega, 'Sucursal', 'Zona'] + cols_consumo +
+            ['Stock CEDI', 'Enviado', 'Necesidad', 'Sugerido', 'Estado'])
+    return h[cols].sort_values([col_codigo, 'Demanda Mensual'], ascending=[True, False]).reset_index(drop=True)
 
 def construir_matriz_transito(transito, matriz_ref, info, col_codigo='CODIGO', col_bodega='CODIGO BODEGA'):
     orden = [c for c in matriz_ref.columns if c in config.BODEGAS_ABASTECIMIENTO]
