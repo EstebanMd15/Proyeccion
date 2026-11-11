@@ -1,7 +1,7 @@
 # Graph Report - Proyeccion  (2026-11-11)
 
 ## Corpus Check
-- 14 files · ~17,720 words
+- 14 files · ~17,758 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 3 file(s) not represented in the graph (top: (none) 1, .toml 1, .css 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `6aa16bf9`
+- Built from commit: `03a63fa0`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -96,7 +96,7 @@ Nodes (24): armar_equipos(), armar_lectura(), contar(), dashboard(), equipos_gua
   templates/proyeccion.html · relation: references
 
 ## Knowledge Gaps
-- **10 isolated node(s):** `pandas 3.0.3`, `streamlit 1.60.0`, `Cobertura, lead time and seguridad parameters`, `Optional pendientes files (pend_disp, pend_com)`, `Umbrales de rotacion A/M` (+5 more)
+- **10 isolated node(s):** `pandas 3.0.3`, `streamlit 1.60.0`, `GET /abastecimiento/consumo`, `GET /rotacion/{tipo}`, `Cobertura, lead time and seguridad parameters` (+5 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 50 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 
 ## Suggested Questions
@@ -106,7 +106,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.191) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `ProyeccionProcessor` (e.g. with `_valorizar_estado()` and `generar()`) actually correct?**
   _`ProyeccionProcessor` has 2 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `pandas 3.0.3`, `streamlit 1.60.0`, `Cobertura, lead time and seguridad parameters` to the rest of the system?**
+- **What connects `pandas 3.0.3`, `streamlit 1.60.0`, `GET /abastecimiento/consumo` to the rest of the system?**
   _10 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Motor de Abastecimiento (Reparto)` be split into smaller, more focused modules?**
   _Cohesion score 0.09065679925994449 - nodes in this community are weakly interconnected._

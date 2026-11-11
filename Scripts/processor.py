@@ -737,6 +737,8 @@ class ProyeccionProcessor:
                 'val_ult':    'Valorizado Ult Costo',
                 'val_prom':   'Valorizado Promedio',
                 'sufijo':     '',
+                'sob_disp': 'Sobrantes Disp',
+                'sob_remi': 'Sobrantes Remi',
 
             },
             {  # hoja TODO REST CEDI
@@ -747,6 +749,8 @@ class ProyeccionProcessor:
                 'val_ult':    'Valorizado Ult Costo sin CEDI',
                 'val_prom':   'Valorizado Promedio sin CEDI',
                 'sufijo':     ' sin CEDI',
+                'sob_disp':   'Sobrantes Disp sin CEDI',
+                'sob_remi':   'Sobrantes Remi sin CEDI',
             },
             {  # hoja TODO REST PUNTOS
                 'segmentos':  ['Pedir_NEPS_Capita sin PUNTOS', 'Pedir_NEPS_Evento sin PUNTOS', 'Pedir_FOMAG_Evento sin PUNTOS'],
@@ -756,14 +760,16 @@ class ProyeccionProcessor:
                 'val_ult':    'Valorizado Ult Costo sin PUNTOS',
                 'val_prom':   'Valorizado Promedio sin PUNTOS',
                 'sufijo':     ' sin PUNTOS',
+                'sob_disp':   'Sobrantes Disp sin PUNTOS',
+                'sob_remi':   'Sobrantes Remi sin PUNTOS'
             },
         ]
 
-        canales_pend = (('Disp', 'Pendientes_Dispensacion', 'Rotacion_Dispensacion'),
-                        ('Com', 'Pendientes_Comercial', 'Rotacion_Remisiones'))
+        canales_pend = (('Disp', 'Pendientes_Dispensacion', 'Rotacion_Dispensacion', 'sob_disp'),
+                        ('Com', 'Pendientes_Comercial', 'Rotacion_Remisiones', 'sob_remi'))
 
         # Valorizado de SOLO el pendiente (igual en todas las variantes)
-        for canal, col_pend, _ in canales_pend:
+        for canal, col_pend, _, _ in canales_pend:
             df[f'Valorizado Pendientes {canal}'] = self._valorizar(df[col_pend], df.get('Ultimo Costo'),
                                                                    df.get('Ultimo Costo'))
 
@@ -790,10 +796,12 @@ class ProyeccionProcessor:
 
             # Cantidad a Pedir + pendiente de cada canal, redondeada con la rotacion
             # del canal: A/M hacia arriba, B (y '-') hacia abajo
-            for canal, col_pend, col_rot in canales_pend:
+            for canal, col_pend, col_rot, col_sob in canales_pend:
                 col_cant = f"Cantidad a Pedir + Pend {canal}{v['sufijo']}"
-                df[col_cant] = self.redondear_por_empaque(df[v['total']] + df[col_pend], cantPas,
-                                                          df[col_rot], b_hacia_abajo=True)
+                sobra_stock = df[v[col_sob]].clip(upper=0)
+                pend_neto = (df[col_pend] + sobra_stock).clip(lower=0)
+                df[col_cant] = self.redondear_por_empaque(df[v['total']] + pend_neto, cantPas, df[col_rot],
+                                                          b_hacia_abajo=True)
                 df[f"Valorizado Cant + Pend {canal}{v['sufijo']}"] = self._valorizar(df[col_cant],
                                                                                      df.get('Ultimo Costo'),
                                                                                      df.get('Ultimo Costo'))
