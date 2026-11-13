@@ -260,11 +260,23 @@ class ProyeccionProcessor:
         pend_disp_agrupado = self.pendientes_disp.groupby('Codigo')['Pendientes_Dispensacion'].sum().reset_index()
         pend_rem_agrupado = self.pendientes_rem.groupby('Codigo')['Pendientes_Comercial'].sum().reset_index()
 
+        # Pendientes de dispensacion que son de FOMAG (los usa la Mejor Opcion de Compra)
+        pend_fomag = self.pendientes_disp
+        if 'Npmbre EPS' in pend_fomag.columns:
+            eps = pend_fomag['Npmbre EPS'].astype(str).str.strip().str.upper()
+            pend_fomag = pend_fomag[eps.str.contains(
+                'FIDEICOMISOS PATRIMONIOS AUTONOMOS FIDUCIARIA LA PREVISORA S.A.|FOMAG', na=False)]
+        else:
+            pend_fomag = pend_fomag.iloc[0:0]
+        pend_fomag_agrupado = (pend_fomag.groupby('Codigo')['Pendientes_Dispensacion'].sum()
+                               .rename('Pendientes_FOMAG').reset_index())
+
         self.consumo_consolidado = pd.merge(disp_pivot, rem_agrupado, on='Codigo', how='outer')
         self.consumo_consolidado = pd.merge(self.consumo_consolidado, stock_bodega_agrupado, on='Codigo', how='outer')
         self.consumo_consolidado = pd.merge(self.consumo_consolidado, stock_puntos_agrupado, on='Codigo', how='outer')
         self.consumo_consolidado = pd.merge(self.consumo_consolidado, pend_disp_agrupado, on='Codigo', how='outer')
         self.consumo_consolidado = pd.merge(self.consumo_consolidado, pend_rem_agrupado, on='Codigo', how='outer')
+        self.consumo_consolidado = pd.merge(self.consumo_consolidado, pend_fomag_agrupado, on='Codigo', how='outer')
         self.consumo_consolidado.fillna(0, inplace=True)
 
         # Remisiones es su propio canal y va aparte: no es dispensacion.
@@ -297,6 +309,7 @@ class ProyeccionProcessor:
             'Stock_Total',
             'Pendientes_Dispensacion',
             'Pendientes_Comercial',
+            'Pendientes_FOMAG',
         ]
 
         self.maestro_consumo = pd.merge(

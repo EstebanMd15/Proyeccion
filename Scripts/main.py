@@ -65,6 +65,7 @@ DESCRIPCIONES_COLUMNAS = {
     'Sobrantes Remi': 'Sobrante (objetivo remi - Bodega Sobrante) (positivo = falta, negativo = sobra)',
     'Total Sobrantes': 'Unidades físicas que sobran (sin doble conteo)',
     'Pendientes_Dispensacion': 'Archivo Pendientes Dispensacion - Cant. Pendiente sumada por código',
+    'Pendientes_FOMAG': 'Archivo Pendientes Dispensacion - Cant. Pendiente de FOMAG sumada por código (ya incluida en Pendientes_Dispensacion)',
     'Pendientes_Comercial': 'Archivo Pendientes Comercial - Cant. Pendiente sumada por código',
     'Origen_Pendiente': 'Calculado - Archvivo de donde viene el pendiente: DISPENSACION, COMERCIAL O AMBOS',
     'Valorizado Pendientes Disp': 'Calculado - SOLO el pendiente de dispensacion X Ultimo costo',
@@ -188,7 +189,7 @@ def _cols_pendientes(sufijo=''):
                  f'Valorizado Pendientes {canal}',
                  f'Valorizado Cant + Pend {canal}{sufijo}',
                  f'Estado + Pend {canal}{sufijo}']
-    return cols + ['Pendientes Total', 'Valorizado Pendientes Total','Origen_Pendiente']
+    return cols + ['Pendientes_FOMAG', 'Pendientes Total', 'Valorizado Pendientes Total','Origen_Pendiente']
 
 
 def construir_hojas(processor):
@@ -398,6 +399,8 @@ def exportar_excel(processor, ruta=None, buffer=None):
                             colorear_encabezados(ws, sub, c, color_pendientes_dispensacion)
                         elif 'Com' in c:
                             colorear_encabezados(ws, sub, c, color_pendientes_comercial)
+                        elif c == 'Pendientes_FOMAG':
+                            colorear_encabezados(ws, sub, c, color_pendientes_dispensacion)
                         elif c in ('Pendientes Total', 'Valorizado Pendientes Total'):
                             colorear_encabezados(ws, sub, c, color_pendientes_Total)
                         elif c in ('Cant. a Pedir sin CEDI + Pend Total', 'Valorizado Cant sin CEDI + Pend Total'):
