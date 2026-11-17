@@ -8,7 +8,7 @@ from Scripts.processor import ProyeccionProcessor
 from fastapi.staticfiles import StaticFiles
 import uuid
 import pandas as pd
-from Scripts import db, abastecimiento, calidad_temp
+from Scripts import db, abastecimiento, calidad_temp, mejor_opcion
 
 
 app = FastAPI()
@@ -218,6 +218,44 @@ def abastecimiento_reparto(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="Abastecimiento-{date.today():%Y-%m-%d}.xlsx"'},
     )
+
+@app.post("/compras/mejor-opcion")
+def mejor_opcion_generar(
+        proyeccion: UploadFile | None = File(None),
+        maestro: UploadFile | None = File(None),
+        lp: UploadFile | None = File(None),
+        cto_fomag: UploadFile | None = File(None),):
+
+    faltantes = [n for n, f in {"proyeccion": proyeccion, "maestro": maestro,
+                                "lp": lp, "cto_fomag": cto_fomag}.items()
+                 if f is None or not f.filename]
+    if faltantes:
+        return JSONResponse({"error": "Faltan archivos: " + ", ".join(faltantes)}, status_code=400)
+    try:
+        df_proyeccion = pd.read_excel(proyeccion.file, sheet_name="Todo REST CEDI", skiprows=1)
+        df_maestro = leer_con_encabezado(maestro.file, "Codigo")
+        df_lp = leer_con_encabezado(lp.file, 'Codigo Articulo')
+        df_cto_fomag = leer_csv_pipe(cto_fomag.file, 'Código Articulo', cols=['Nro. Contrato',
+                                                                              'Código Articulo', 'Estado Referencia', 'Codigo Padre', 'Código Cum.1'])
+
+        comerciales = abastecimiento.medicamentos_comerciales(df_maestro)
+        codigos_fomag = abastecimiento.codigos_fomag_desde_archivo(df_cto_fomag, df_maestro, comerciales)
+
+        if 'Pendientes_FOMAG' not in df_proyeccion.columns:
+            return JSONResponse({"error": "Genera una Proyección nueva, esta no trae los pendientes_FOMAG"},
+                                status_code=400)
+
+        buffer = io.BytesIO()
+        mejor_opcion.generar_mejor_opcion(df_proyeccion, df_maestro, df_lp, codigos_fomag, buffer)
+        buffer.seek(0)
+    except Exception as e:
+        return JSONResponse({"error": "No se pudo generar el archivo 'Mejor Opción'. Revisa que los archivos sean, la proyección, "
+                                      "el maestro, la lista de precio general y el contrato FOMAG. (" + str(e) + ")"}, status_code=400)
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="Mejor-Opcion-{date.today():%Y-%m-%d}.xlsx"'},
+    )
 @app.get("/compras")
 def compras_pagina(request: Request):
     return templates.TemplateResponse(request, "compras.html", {"seccion":"compras"})
@@ -257,3 +295,7 @@ def consumos(request: Request):
 @app.get("/rotacion/periodos")
 def rotacion_periodos():
     return JSONResponse(db.periodos_cargados())
+
+@app.get("/mejor-opcion")
+def mejor_opcion_pagina(request: Request):
+    return templates.TemplateResponse(request, "mejor_opcion.html", {"seccion": "compras"})

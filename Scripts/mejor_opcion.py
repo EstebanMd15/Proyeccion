@@ -1,8 +1,10 @@
 """Mejor Opcion de Compra.
 
 Cruza la Proyeccion con la Lista de Precios (LP) de proveedores y entrega, por
-codigo Mantis y linea (NEPS-REM / FOMAG), las 3 opciones de compra mas baratas
-con las cantidades a pedir en los 3 escenarios de la Proyeccion.
+codigo Mantis, las 3 opciones de compra mas baratas con las cantidades a pedir en
+los 2 escenarios de la hoja Todo REST CEDI de la Proyeccion (sin CEDI y sin CEDI +
+Pend Total). NEPS-REM y FOMAG van en una sola fila con la necesidad sumada (y su
+detalle en columnas aparte).
 
 Reglas:
   - Costo que se compara: Costo Negociacion (por unidad, sin IVA, sin descuentos).
@@ -16,6 +18,11 @@ Reglas:
     codigos/proveedores con el mismo costo (a igual costo se respeta el orden de la LP).
   - La cantidad se ajusta a la Cantidad Pastillas del codigo de cada opcion
     (no se usa el Embalaje de la LP ni se excluye por Bloqueo para Compra).
+  - Si la opcion 1 de NEPS-REM y la de FOMAG no coinciden (codigo + proveedor), o
+    una de las dos lineas no tiene opcion, la molecula sale en 2 filas, una por linea.
+  - En la fila unificada, si una opcion 2 o 3 no esta en el contrato FOMAG, su cantidad
+    solo cubre NEPS-REM y la columna Cubre FOMAG queda en NO.
+  - El redondeo por empaque se hace sobre el total (NEPS-REM + FOMAG).
   - Pendientes FOMAG (escenario sin CEDI + Pend): pendientes de dispensacion netos
     x (Pendientes_FOMAG / Pendientes_Dispensacion); los comerciales van a NEPS-REM.
 """
@@ -29,7 +36,7 @@ from Scripts.processor import ProyeccionProcessor
 INVIMA_EXCLUIDOS = {'VENCIDO', 'DESISTIDO', 'NEGADO', 'CANCELADO', 'ABANDONO'}
 N_OPCIONES = 3
 # (etiqueta corta en el Excel, clave interna)
-ESCENARIOS = [('Cant. a Pedir', 'E1'), ('Cant. sin CEDI', 'E2'), ('Cant. sin CEDI + Pend', 'E3')]
+ESCENARIOS = [('Cant. sin CEDI', 'E1'), ('Cant. sin CEDI + Pend', 'E2')]
 COLOR_BASE = 'D9D9D9'
 COLORES_OPCION = {1: 'C6EFCE', 2: 'DDEBF7', 3: 'FFF2CC'}
 
@@ -60,46 +67,42 @@ def lp_desde_archivo(df):
     return lp[['Codigo Articulo', 'Nit', 'Nombre Completo', 'Cod Proveedor', 'Costo Negociacion', 'Plazo']]
 
 
-def necesidades_desde_proyeccion(df_todo, df_cedi):
-    """Necesidad por codigo y linea en los 3 escenarios.
-    E1 = Cantidad a Pedir (hoja Todo), E2 = sin CEDI, E3 = sin CEDI + Pend Total (hoja Todo REST CEDI).
-    FOMAG en E3 = FOMAG sin CEDI + la parte FOMAG de los pendientes de dispensacion netos."""
-    t = df_todo.copy()
-    c = df_cedi.copy()
-    t['Codigo'] = _cod(t['Codigo'])
-    c['Codigo'] = _cod(c['Codigo'])
-    base = t[['Codigo', 'Codigo_Molecula', 'Rotacion']].copy()
-    base['E1'] = _num(t, 'Cantidad a Pedir')
-    base['F1'] = _num(t, 'Pedir_FOMAG_Evento')
+def _molecula(df):
+    """Molecula de cada fila; sin Codigo_Molecula el codigo queda como su propia molecula."""
+    cod = _cod(df['Codigo'])
+    mol = _cod(df['Codigo_Molecula'])
+    sin_mol = df['Codigo_Molecula'].isna() | mol.isin(['', '0', 'nan'])
+    return pd.Series(np.where(sin_mol, 'COD-' + cod, mol), index=df.index)
 
-    c2 = pd.DataFrame({'Codigo': c['Codigo']})
-    c2['E2'] = _num(c, 'Cantidad a Pedir sin CEDI')
-    c2['E3'] = _num(c, 'Cant. a Pedir sin CEDI + Pend Total')
-    c2['F2'] = _num(c, 'Pedir_FOMAG_Evento sin CEDI')
-    extra_disp = (_num(c, 'Cantidad a Pedir + Pend Disp sin CEDI') - c2['E2']).clip(lower=0)
+
+def necesidades_desde_proyeccion(df_cedi):
+    """Necesidad por codigo y linea en los 2 escenarios de la hoja Todo REST CEDI.
+    E1 = Cantidad a Pedir sin CEDI, E2 = Cant. a Pedir sin CEDI + Pend Total.
+    FOMAG en E2 = FOMAG sin CEDI + la parte FOMAG de los pendientes de dispensacion netos."""
+    c = df_cedi.copy()
+    n = pd.DataFrame({'Codigo': _cod(c['Codigo']), 'Molecula': _molecula(c),
+                      'Rotacion': c['Rotacion'].fillna('B').astype(str)})
+    n['E1'] = _num(c, 'Cantidad a Pedir sin CEDI')
+    n['E2'] = _num(c, 'Cant. a Pedir sin CEDI + Pend Total')
+    n['F1'] = _num(c, 'Pedir_FOMAG_Evento sin CEDI')
+    extra_disp = (_num(c, 'Cantidad a Pedir + Pend Disp sin CEDI') - n['E1']).clip(lower=0)
     pend_disp = _num(c, 'Pendientes_Dispensacion')
     pend_fomag = _num(c, 'Pendientes_FOMAG')
     parte = (pend_fomag / pend_disp.where(pend_disp > 0)).fillna(0).clip(0, 1)
-    c2['F3'] = c2['F2'] + (extra_disp * parte).round()
-
-    n = base.merge(c2, on='Codigo', how='outer').fillna({k: 0 for k in ['E1', 'E2', 'E3', 'F1', 'F2', 'F3']})
-    mol = _cod(n['Codigo_Molecula'])
-    sin_mol = n['Codigo_Molecula'].isna() | mol.isin(['', '0', 'nan'])
-    n['Molecula'] = np.where(sin_mol, 'COD-' + n['Codigo'], mol)
-    n['Rotacion'] = n['Rotacion'].fillna('B').astype(str)
+    n['F2'] = n['F1'] + (extra_disp * parte).round()
 
     filas = []
-    for i in (1, 2, 3):
+    for i in (1, 2):
         n[f'FOMAG_{i}'] = np.minimum(n[f'F{i}'], n[f'E{i}']).clip(lower=0)
         n[f'NEPS_{i}'] = (n[f'E{i}'] - n[f'FOMAG_{i}']).clip(lower=0)
     for linea, pref in (('NEPS-REM', 'NEPS'), ('FOMAG', 'FOMAG')):
         f = n[['Codigo', 'Molecula', 'Rotacion']].copy()
         f['Linea'] = linea
-        for i in (1, 2, 3):
+        for i in (1, 2):
             f[f'E{i}'] = n[f'{pref}_{i}']
         filas.append(f)
     nec = pd.concat(filas, ignore_index=True)
-    return nec[nec[['E1', 'E2', 'E3']].sum(axis=1) > 0]
+    return nec[nec[['E1', 'E2']].sum(axis=1) > 0]
 
 
 def candidatos(lp, maestro, mol_map, codigos_fomag):
@@ -128,57 +131,87 @@ def _empates(opciones, todos):
     return out
 
 
+def _fila(g, c, nombres):
+    """Una fila del archivo. g = necesidades (NEPS-REM y/o FOMAG) que van en la fila,
+    c = candidatos de la molecula ya ordenados por costo."""
+    por_cod = (g.groupby('Codigo', sort=False)
+                .agg(E1=('E1', 'sum'), E2=('E2', 'sum'), Rotacion=('Rotacion', 'first'))
+                .sort_values(['E2', 'E1'], ascending=False, kind='stable'))
+    top = por_cod.iloc[0]
+    neps, fomag = g[g['Linea'] == 'NEPS-REM'], g[g['Linea'] == 'FOMAG']
+    ops = c.head(N_OPCIONES)
+    empates = _empates(ops, c)
+
+    cod_fila = ops.iloc[0]['Codigo'] if len(ops) else por_cod.index[0]
+    fila = {'Código Mantis': cod_fila, 'Nombre': nombres.get(cod_fila, ''),
+            'Códigos agrupados': ', '.join(por_cod.index)}
+    for etiqueta, e in (('sin CEDI', 'E1'), ('sin CEDI + Pend', 'E2')):
+        fila[f'Nec. NEPS-REM {etiqueta}'] = neps[e].sum()
+        fila[f'Nec. FOMAG {etiqueta}'] = fomag[e].sum()
+        fila[f'Nec. {etiqueta}'] = neps[e].sum() + fomag[e].sum()
+    fila['_rot'] = top['Rotacion']
+    fila['Estado'] = 'SIN LP' if len(ops) == 0 else (
+        'OK' if len(ops) == N_OPCIONES else f'{len(ops)} OPCI{"ÓN" if len(ops) == 1 else "ONES"}')
+    hay_fomag = fomag[['E1', 'E2']].to_numpy().sum() > 0
+    for k in range(1, N_OPCIONES + 1):
+        o = ops.iloc[k - 1] if k <= len(ops) else None
+        cubre = o is not None and bool(o['FOMAG_OK'])
+        fila[f'_pas{k}'] = o['Cantidad Pastillas'] if o is not None else 0
+        fila[(k, 'Código Mantis')] = o['Codigo'] if o is not None else ''
+        fila[(k, 'Nombre')] = o['Nombre'] if o is not None else ''
+        fila[(k, 'NIT')] = o['Nit'] if o is not None else ''
+        fila[(k, 'Proveedor')] = o['Nombre Completo'] if o is not None else ''
+        fila[(k, 'Cod Proveedor')] = o['Cod Proveedor'] if o is not None else ''
+        fila[(k, 'Costo Negociación')] = o['Costo Negociacion'] if o is not None else np.nan
+        fila[(k, 'Plazo')] = o['Plazo'] if o is not None else np.nan
+        fila[(k, 'Empate')] = empates[k - 1] if o is not None else ''
+        fila[(k, 'Cubre FOMAG')] = ('SI' if cubre else 'NO') if (o is not None and hay_fomag) else ''
+        # Necesidad que cubre la opcion: la parte FOMAG solo si el codigo esta en el contrato
+        for e in ('E1', 'E2'):
+            fila[f'_base{k}{e}'] = neps[e].sum() + (fomag[e].sum() if cubre else 0)
+    return fila
+
+
 def calcular_mejor_opcion(nec, cand, nombres):
-    """Una fila por molecula + linea con necesidad; las 3 mejores opciones de compra."""
+    """Una fila por molecula con la necesidad de NEPS-REM + FOMAG sumada y las 3 mejores
+    opciones de compra. Si la opcion 1 de NEPS-REM y la de FOMAG no son el mismo codigo y
+    proveedor (o una linea no tiene opcion), la molecula sale en 2 filas, una por linea."""
     por_mol = {k: g for k, g in cand.groupby('Molecula', sort=False)}
     vacia = cand.iloc[0:0]
     filas = []
-    for (mol, linea), g in nec.groupby(['Molecula', 'Linea'], sort=False):
-        g = g.sort_values(['E3', 'E2', 'E1'], ascending=False)
-        top = g.iloc[0]
-        c = por_mol.get(mol, vacia)
-        if linea == 'FOMAG':
-            c = c[c['FOMAG_OK']]
-        ops = c.head(N_OPCIONES)
-        empates = _empates(ops, c)
-
-        cod_fila = ops.iloc[0]['Codigo'] if len(ops) else top['Codigo']
-        fila = {'Código Mantis': cod_fila, 'Nombre': nombres.get(cod_fila, ''), 'Línea': linea,
-                'Códigos agrupados': ', '.join(g['Codigo']),
-                'Nec. Cant. a Pedir': g['E1'].sum(), 'Nec. sin CEDI': g['E2'].sum(),
-                'Nec. sin CEDI + Pend': g['E3'].sum(), '_rot': top['Rotacion'],
-                'Estado': 'SIN LP' if len(ops) == 0 else ('OK' if len(ops) == N_OPCIONES
-                                                          else f'{len(ops)} OPCI{"ÓN" if len(ops) == 1 else "ONES"}')}
-        for k in range(1, N_OPCIONES + 1):
-            o = ops.iloc[k - 1] if k <= len(ops) else None
-            fila[f'_pas{k}'] = o['Cantidad Pastillas'] if o is not None else 0
-            fila[(k, 'Código Mantis')] = o['Codigo'] if o is not None else ''
-            fila[(k, 'Nombre')] = o['Nombre'] if o is not None else ''
-            fila[(k, 'NIT')] = o['Nit'] if o is not None else ''
-            fila[(k, 'Proveedor')] = o['Nombre Completo'] if o is not None else ''
-            fila[(k, 'Cod Proveedor')] = o['Cod Proveedor'] if o is not None else ''
-            fila[(k, 'Costo Negociación')] = o['Costo Negociacion'] if o is not None else np.nan
-            fila[(k, 'Plazo')] = o['Plazo'] if o is not None else np.nan
-            fila[(k, 'Empate')] = empates[k - 1] if o is not None else ''
-        filas.append(fila)
+    for mol, gm in nec.groupby('Molecula', sort=False):
+        c_todos = por_mol.get(mol, vacia)
+        c_fomag = c_todos[c_todos['FOMAG_OK']]
+        neps, fomag = gm[gm['Linea'] == 'NEPS-REM'], gm[gm['Linea'] == 'FOMAG']
+        if len(neps) and len(fomag):
+            clave = lambda c: (c.iloc[0]['Codigo'], c.iloc[0]['Nit']) if len(c) else None
+            if clave(c_todos) == clave(c_fomag):
+                filas.append(_fila(gm, c_todos, nombres))
+            else:
+                filas.append(_fila(neps, c_todos, nombres))
+                filas.append(_fila(fomag, c_fomag, nombres))
+        elif len(neps):
+            filas.append(_fila(neps, c_todos, nombres))
+        else:
+            filas.append(_fila(fomag, c_fomag, nombres))
 
     out = pd.DataFrame(filas)
     if out.empty:
         return out
-    # Cantidades ajustadas al empaque del codigo de cada opcion y su valor
-    necs = {'E1': 'Nec. Cant. a Pedir', 'E2': 'Nec. sin CEDI', 'E3': 'Nec. sin CEDI + Pend'}
+    # Cantidades: la necesidad total que cubre cada opcion, ajustada al empaque de su codigo
     for k in range(1, N_OPCIONES + 1):
         hay = out[(k, 'Código Mantis')].ne('')
         costo = out[(k, 'Costo Negociación')].fillna(0)
         for etiqueta, e in ESCENARIOS:
-            cant = ProyeccionProcessor.redondear_por_empaque(out[necs[e]], out[f'_pas{k}'], out['_rot'])
+            cant = ProyeccionProcessor.redondear_por_empaque(out[f'_base{k}{e}'], out[f'_pas{k}'], out['_rot'])
             cant = np.where(hay, cant, np.nan)
             out[(k, etiqueta)] = cant
             out[(k, f'Valor {etiqueta}')] = np.where(hay, cant * costo, np.nan).round(2)
-    out = out.drop(columns=['_rot'] + [f'_pas{k}' for k in range(1, N_OPCIONES + 1)])
+    aux = [c for c in out.columns if isinstance(c, str) and c.startswith('_')]
+    out = out.drop(columns=aux)
     orden_estado = {'OK': 0, '2 OPCIONES': 1, '1 OPCIÓN': 2, 'SIN LP': 3}
     out['_o'] = out['Estado'].map(orden_estado)
-    out = out.sort_values(['_o', 'Código Mantis', 'Línea']).drop(columns='_o').reset_index(drop=True)
+    out = out.sort_values(['_o', 'Código Mantis'], kind='stable').drop(columns='_o').reset_index(drop=True)
     return out
 
 
@@ -227,12 +260,11 @@ def exportar(out, ruta):
     return ruta
 
 
-def generar_mejor_opcion(df_todo, df_cedi, df_maestro, df_lp, codigos_fomag, ruta):
-    nec = necesidades_desde_proyeccion(df_todo, df_cedi)
+def generar_mejor_opcion(df_cedi, df_maestro, df_lp, codigos_fomag, ruta):
+    """df_cedi = hoja Todo REST CEDI de la Proyeccion."""
+    nec = necesidades_desde_proyeccion(df_cedi)
     # Molecula de TODOS los codigos de la Proyeccion (tambien los que no tienen necesidad)
-    cod = _cod(df_todo['Codigo'])
-    mol = _cod(df_todo['Codigo_Molecula'])
-    mol_map = pd.Series(np.where(mol.isin(['', '0', 'nan']), 'COD-' + cod, mol), index=cod)
+    mol_map = pd.Series(_molecula(df_cedi).to_numpy(), index=_cod(df_cedi['Codigo']))
     mol_map = mol_map[~mol_map.index.duplicated()]
 
     lp = lp_desde_archivo(df_lp)
