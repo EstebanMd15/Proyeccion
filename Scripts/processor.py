@@ -750,8 +750,8 @@ class ProyeccionProcessor:
                 'val_ult':    'Valorizado Ult Costo',
                 'val_prom':   'Valorizado Promedio',
                 'sufijo':     '',
-                'sob_disp': 'Sobrantes Disp',
-                'sob_remi': 'Sobrantes Remi',
+                'sob_total': 'Total Sobrantes',
+                'tope_com': 'Sobrantes Remi',
 
             },
             {  # hoja TODO REST CEDI
@@ -762,8 +762,8 @@ class ProyeccionProcessor:
                 'val_ult':    'Valorizado Ult Costo sin CEDI',
                 'val_prom':   'Valorizado Promedio sin CEDI',
                 'sufijo':     ' sin CEDI',
-                'sob_disp':   'Sobrantes Disp sin CEDI',
-                'sob_remi':   'Sobrantes Remi sin CEDI',
+                'sob_total':  'Total Sobrantes sin CEDI',
+                'tope_com':   None,
             },
             {  # hoja TODO REST PUNTOS
                 'segmentos':  ['Pedir_NEPS_Capita sin PUNTOS', 'Pedir_NEPS_Evento sin PUNTOS', 'Pedir_FOMAG_Evento sin PUNTOS'],
@@ -773,13 +773,15 @@ class ProyeccionProcessor:
                 'val_ult':    'Valorizado Ult Costo sin PUNTOS',
                 'val_prom':   'Valorizado Promedio sin PUNTOS',
                 'sufijo':     ' sin PUNTOS',
-                'sob_disp':   'Sobrantes Disp sin PUNTOS',
-                'sob_remi':   'Sobrantes Remi sin PUNTOS'
+                'sob_total':  'Total Sobrantes sin PUNTOS',
+                'tope_com':    None,
             },
         ]
 
         canales_pend = (('Disp', 'Pendientes_Dispensacion', 'Rotacion_Dispensacion', 'sob_disp'),
                         ('Com', 'Pendientes_Comercial', 'Rotacion_Remisiones', 'sob_remi'))
+
+
 
         # Valorizado de SOLO el pendiente (igual en todas las variantes)
         for canal, col_pend, _, _ in canales_pend:
@@ -791,6 +793,7 @@ class ProyeccionProcessor:
                                                             df.get('Ultimo Costo'))
 
         for v in variantes:
+
             # Dispensacion (segmentos + total de dispensacion) -> Rotacion_Dispensacion
             for col in v['segmentos'] + [v['disp_total']]:
                 if col in df.columns:
@@ -807,12 +810,20 @@ class ProyeccionProcessor:
             df[v['val_ult']] = self._valorizar(df[v['total']], df.get('Ultimo Costo'), df.get('Ultimo Costo'))
             df[v['val_prom']] = self._valorizar(df[v['total']], df.get('Costo Promedio'), df.get('Costo Promedio'))
 
+            bolson = (-df[v['sob_total']]).clip(lower=0)
+            cubre_disp = np.minimum(df['Pendientes_Dispensacion'], bolson)
+            resto = bolson - cubre_disp
+            if v['tope_com']:
+                resto = np.minimum(resto, (-df[v['tope_com']]).clip(lower=0))
+            cubre_com = np.minimum(df['Pendientes_Comercial'], resto)
+            neto = {'Disp': df['Pendientes_Dispensacion'] - cubre_disp,
+                    'Com': df['Pendientes_Comercial'] - cubre_com}
+
             # Cantidad a Pedir + pendiente de cada canal, redondeada con la rotacion
             # del canal: A/M hacia arriba, B (y '-') hacia abajo
             for canal, col_pend, col_rot, col_sob in canales_pend:
                 col_cant = f"Cantidad a Pedir + Pend {canal}{v['sufijo']}"
-                sobra_stock = df[v[col_sob]].clip(upper=0)
-                pend_neto = (df[col_pend] + sobra_stock).clip(lower=0)
+                pend_neto = neto[canal]
                 df[col_cant] = self.redondear_por_empaque(df[v['total']] + pend_neto, cantPas, df[col_rot],
                                                           b_hacia_abajo=True)
                 df[f"Valorizado Cant + Pend {canal}{v['sufijo']}"] = self._valorizar(df[col_cant],
