@@ -204,10 +204,11 @@ def abastecimiento_reparto(
         if recibidos is not None and recibidos.filename:
             rec = abastecimiento.transito_desde_archivo(leer_con_encabezado(recibidos.file, 'Codigo'), recibidos=True)
         info = abastecimiento.info_producto_desde_maestro(df_maestro)
+        unidades = abastecimiento.obtener_unidades_redondeo(df_maestro)
 
         buffer = io.BytesIO()
         abastecimiento.generar_abastecimiento(df_consumo, stock_cedi, pedidos,
-                                              codigos_fomag, trans, info, buffer, mol_map, df_cedi, comerciales, rec)
+                                              codigos_fomag, trans, info, buffer, mol_map, df_cedi, comerciales, rec, unidades=unidades)
         buffer.seek(0)
     except Exception as e:
         return JSONResponse({"error": "No se pudo generar el reparto. Revisa que los archivos sean el Consumo, "

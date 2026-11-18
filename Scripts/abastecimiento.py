@@ -98,9 +98,38 @@ def descontar_enviado(pond, enviado, mol_map, col_codigo='CODIGO', col_bodega='C
     pond['Ponderado'] = pendiente
     return pond[pond['Ponderado'] > 0].drop(columns='Enviado').reset_index(drop=True)
 
-def repartir(pesos, pedidos, col_codigo='CODIGO'):
+def _redondear_bodegas(exacto, consumo, total, unidad, rotacion, por_blister):
+    """Redondea lo que le toca a cada bodega a la unidad (blister o caja) según la rotación.
+        A y M suben; B baja si va por blister, y si va por caja sube solo si lo que sobra es
+        >= PORCENTAJE_ABASTECIMIENTO. Si la suma pasa del total, las bodegas de menor consumo
+        que subieron vuelven a bajar hasta que alcance."""
+    pct = config.PORCENTAJE_ABASTECIMIENTO
+    exacto = exacto.round(6)
+    piso = np.floor(exacto / unidad) * unidad
+    techo = np.ceil(exacto / unidad) * unidad
+
+    if rotacion in ("A", "M"):
+        und= techo
+    elif por_blister:
+        und = piso
+    else:
+        und = piso.where(exacto - piso < unidad * pct, techo)
+
+    if und.sum() > total:
+        subieron = und.index[und > piso]
+        for i in consumo.loc[subieron].sort_values(kind='stable').index:
+            und.loc[i] = piso.loc[i]
+            if und.sum() <= total:
+                break
+    return und
+
+def repartir(pesos, pedidos, col_codigo='CODIGO', unidades=None, rotaciones=None):
+    """Reparte el disponible de cada código entre las bodegas según su peso. Con unidades
+        ({codigo: (unidad, por_blister)}) cada bodega recibe blisters o cajas completas."""
     pesos = pesos.copy()
     pesos['Unidades'] = 0
+    unidades = unidades or {}
+    rotaciones = rotaciones or {}
 
     for codigo, grupo in pesos.groupby(col_codigo):
         total = int(pedidos.get(codigo, 0))
@@ -108,6 +137,15 @@ def repartir(pesos, pedidos, col_codigo='CODIGO'):
             continue # Sin pedido o sin prescripcion -> queda en 0
 
         exacto = grupo['Peso'] * total
+
+        #Redondeo por blister o caja
+        unidad, por_blister = unidades.get(codigo, (0, False))
+        if unidad >= 2:
+            rot = str(rotaciones.get(codigo, 'B')).strip().upper()
+            und = _redondear_bodegas(exacto, grupo['Ponderado'], total, unidad, rot, por_blister)
+            pesos.loc[grupo.index, 'Unidades'] = und.astype(int).values
+            continue
+
         piso = np.floor(exacto)
         und_sobran = int(total - piso.sum())
 
@@ -417,7 +455,7 @@ def asignar_lotes(rep, lotes, grupos_distancia, col_codigo='CODIGO', col_bodega=
 
 def generar_abastecimiento(df_prescrita,stock_cedi, pedidos,
                            codigos_fomag, transito, info,
-                           ruta, mol_map, df_lotes, comerciales, recibidos=None):
+                           ruta, mol_map, df_lotes, comerciales, recibidos=None, unidades=None):
 
     pond = ponderar_prescrita(df_prescrita,
                               codigos_fomag=codigos_fomag)  # pesos 50/30/20 con filtro de códigos de FOMAG
@@ -435,7 +473,12 @@ def generar_abastecimiento(df_prescrita,stock_cedi, pedidos,
     pesos, disp = cubrir_faltante_molecula(pesos, disp, mol_map, codigos_fomag, comerciales)
     disp['Enviado'] = disp['CODIGO'].map(enviado.groupby('CODIGO')['Enviado'].sum()).fillna(0).astype('int64')
     a_repartir = dict(zip(disp['CODIGO'], disp['Disponible']))
-    rep = repartir(pesos, a_repartir)
+    if config.REDONDEO_BLISTER_ABASTECIMIENTO and unidades:
+        #Redondeo por blister o caja según la rotacion de dispensacion de cada código
+        rotaciones = dict(zip(disp['CODIGO'], disp['Rotacion_Disp']))
+        rep = repartir(pesos, a_repartir, unidades=unidades, rotaciones=rotaciones)
+    else:
+        rep = repartir(pesos, a_repartir)
     lotes = lotes_repartibles_desde_archivo(df_lotes)
     asignacion = asignar_lotes(rep, lotes, config.GRUPOS_DISTANCIA_ABASTECIMIENTO)
     rep = asignacion.groupby(['CODIGO', 'CODIGO BODEGA'], as_index=False)['Unidades'].sum()
@@ -643,4 +686,32 @@ def filtrar_fomag_sin_contrato(df, codigos_fomag, col_codigo='CODIGO', col_clien
     sin_contrato = ~cod.isin(codigos_fomag)
     quitar = es_fomag & sin_contrato
     return df[~quitar].copy()
+
+def obtener_unidades_redondeo(maestro, col_codigo="Codigo", col_pastillas="Cantidad Pastillas"):
+    """Unidad de redondeo del reparto por código.
+        Cantidad Pastillas >= UMBRAL_BLISTER -> se usa la columna del blister; si no, la caja.
+        Devuelve {codigo: (unidad, por_blister)}. Unidad 0 = ese código no se redondea."""
+    #Código y pastillas en un mismo formato
+    cod = maestro[col_codigo].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+    pastillas = pd.to_numeric(maestro[col_pastillas], errors='coerce').fillna(0)
+
+    # Busca la columna del blister sin importar mayusculas ni espacios
+    buscada = config.COLUMNA_BLISTER.strip().lower()
+    col_blister = next((c for c in maestro.columns if str(c).strip().lower() == buscada), None)
+    if col_blister is None:
+        blister = pd.Series(0, index=maestro.index) #Maestro sin columna, no se redondea por blister
+
+    else:
+        blister = pd.to_numeric(maestro[col_blister], errors='coerce').fillna(0)
+
+    # redondear a blister desde el umbral (112 incluido), si no a caja
+    por_blister = pastillas >= config.UMBRAL_BLISTER
+    unidad = np.where(por_blister, blister, pastillas)
+
+    #Una entrada por código
+    tabla = pd.DataFrame({"CODIGO": cod, "Unidad": unidad, "Por_Blister": por_blister})
+    tabla = tabla.drop_duplicates('CODIGO')
+    return {c: (u, b) for c, u, b in zip(tabla['CODIGO'], tabla['Unidad'], tabla['Por_Blister'])}
+
+
 
