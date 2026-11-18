@@ -495,7 +495,9 @@ class ProyeccionProcessor:
 
         for col_consumo, col_rotacion in [('Consumo_Dispensacion_Total', 'Rotacion_Dispensacion'),
                                           ('Consumo_Remisiones', 'Rotacion_Remisiones'),
-                                          ('Consumo_FOMAG_Evento', 'Rotacion_FOMAG')]:
+                                          ('Consumo_FOMAG_Evento', 'Rotacion_FOMAG'),
+                                          ('Consumo_NEPS_Evento', 'Rotacion_NEPS_Evento'),
+                                          ('Consumo_NEPS_Capita', 'Rotacion_NEPS_Capita'),]:
             if col_consumo not in df.columns:
                 continue
             letra = self._pareto_abc(df[col_consumo], umbral_A, umbral_M)
