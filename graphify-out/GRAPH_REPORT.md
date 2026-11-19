@@ -1,17 +1,17 @@
-# Graph Report - Proyeccion  (2026-11-18)
+# Graph Report - Proyeccion  (2026-11-19)
 
 ## Corpus Check
-- 15 files · ~20,680 words
+- 15 files · ~20,919 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 3 file(s) not represented in the graph (top: (none) 1, .toml 1, .css 1)
 
 ## Summary
-- 274 nodes · 582 edges · 9 communities (8 shown, 1 thin omitted)
+- 275 nodes · 586 edges · 9 communities (8 shown, 1 thin omitted)
 - Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 39 edges (avg confidence: 0.89)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `8b837cb0`
+- Built from commit: `47a03d38`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -29,7 +29,7 @@
 ## God Nodes (most connected - your core abstractions)
 1. `ProyeccionProcessor` - 36 edges
 2. `generar_abastecimiento()` - 19 edges
-3. `abastecimiento_reparto()` - 16 edges
+3. `abastecimiento_reparto()` - 17 edges
 4. `generar_mejor_opcion()` - 11 edges
 5. `dashboard()` - 10 edges
 6. `generar()` - 10 edges
@@ -62,7 +62,7 @@
 
 ### Community 0 - "Motor de Abastecimiento (Reparto)"
 Cohesion: 0.08
-Nodes (38): asignar_lotes(), calcular_disponible(), calcular_pesos(), codigos_fomag_desde_archivo(), construir_matriz(), construir_matriz_transito(), construir_reservas(), cubrir_faltante_molecula() (+30 more)
+Nodes (39): asignar_lotes(), calcular_disponible(), calcular_pesos(), codigos_fomag_desde_archivo(), construir_matriz(), construir_matriz_transito(), construir_reservas(), cubrir_faltante_molecula() (+31 more)
 
 ### Community 2 - "API Web y Consultas BD"
 Cohesion: 0.18
@@ -105,13 +105,13 @@ Nodes (8): _cols_pendientes(), construir_hojas(), _descripcion_columna(), export
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `ProyeccionProcessor` connect `Motor de Proyeccion de Compras` to `main.py`, `Motor de Abastecimiento (Reparto)`, `API Web y Consultas BD`, `mejor_opcion.py`?**
-  _High betweenness centrality (0.183) - this node is a cross-community bridge._
+  _High betweenness centrality (0.182) - this node is a cross-community bridge._
 - **Are the 3 inferred relationships involving `ProyeccionProcessor` (e.g. with `_valorizar_estado()` and `calcular_mejor_opcion()`) actually correct?**
   _`ProyeccionProcessor` has 3 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `pandas 3.0.3`, `streamlit 1.60.0`, `Cobertura, lead time and seguridad parameters` to the rest of the system?**
   _10 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Motor de Abastecimiento (Reparto)` be split into smaller, more focused modules?**
-  _Cohesion score 0.07769423558897243 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07743496672716274 - nodes in this community are weakly interconnected._
 - **Why does `dashboard()` connect `calidad_temp.py` to `Motor de Abastecimiento (Reparto)`?**
   _High betweenness centrality (0.022) - this node is a cross-community bridge._
 - **Should `Motor de Proyeccion de Compras` be split into smaller, more focused modules?**

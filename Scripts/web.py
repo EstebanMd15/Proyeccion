@@ -179,7 +179,8 @@ def abastecimiento_reparto(
         transito: UploadFile | None = File(None),
         maestro: UploadFile | None = File(None),
         cto_fomag: UploadFile | None = File(None),
-        recibidos: UploadFile | None = File(None),):
+        recibidos: UploadFile | None = File(None),
+        pendientes: UploadFile | None = File(None),):
 
     faltantes = [n for n, f in {"consumo": consumo, "cedi": cedi, "proyeccion": proyeccion,
                                 "transito": transito, "maestro": maestro, 'cto_fomag': cto_fomag}.items()
@@ -203,16 +204,22 @@ def abastecimiento_reparto(
         rec = None
         if recibidos is not None and recibidos.filename:
             rec = abastecimiento.transito_desde_archivo(leer_con_encabezado(recibidos.file, 'Codigo'), recibidos=True)
+        pend = None
+        if pendientes is not None and pendientes.filename:
+            pend = abastecimiento.pendientes_desde_archivo(leer_csv_pipe(pendientes.file, 'Cod. Artículo', cols=[
+                'Cod. Artículo', 'Bodega', 'Npmbre EPS', 'Cant. Pendiente'
+            ]))
         info = abastecimiento.info_producto_desde_maestro(df_maestro)
         unidades = abastecimiento.obtener_unidades_redondeo(df_maestro)
 
         buffer = io.BytesIO()
         abastecimiento.generar_abastecimiento(df_consumo, stock_cedi, pedidos,
-                                              codigos_fomag, trans, info, buffer, mol_map, df_cedi, comerciales, rec, unidades=unidades)
+                                              codigos_fomag, trans, info, buffer, mol_map, df_cedi, comerciales,
+                                              rec, unidades=unidades, pendientes=pend)
         buffer.seek(0)
     except Exception as e:
         return JSONResponse({"error": "No se pudo generar el reparto. Revisa que los archivos sean el Consumo, "
-                                      "Valorizado CEDI, Proyección, Tránsito, Maestro y Contrato FOMAG. (" + str(e) + ")"},
+                                      "Valorizado CEDI, Proyección, Tránsito, Maestro, Pendientes y Contrato FOMAG. (" + str(e) + ")"},
                             status_code=400)
     return StreamingResponse(
         buffer,
