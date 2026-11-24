@@ -123,8 +123,9 @@
         if (e.submitter.value === "dashboard"){
             e.preventDefault();
             const win = window.open("","_blank");
-            win.document.write('<link rel="stylesheet" href="/static/style.css?v=4"><div class="overlay" style="display:flex"><div' +
+            win.document.write('<link rel="stylesheet" href="/static/style.css?v=12"><div class="overlay" style="display:flex"><div' +
                 ' class="spinner"></div><p>Generando Dashboard...</p></div>');
+            win.document.documentElement.dataset.theme = document.documentElement.dataset.theme;
             try {
                 const fd = new FormData(form);
                 fd.append("accion", "dashboard");
