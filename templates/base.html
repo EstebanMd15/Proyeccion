@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %} Motor Inteligencia de Negocios{% endblock %}</title>
-    <link rel="stylesheet" href="/static/style.css?v=9">
+    <script>
+        document.documentElement.dataset.theme = localStorage.getItem("tema") || "dark";
+    </script>
+    <link rel="stylesheet" href="/static/style.css?v=12">
 </head>
 <body>
     <nav class="topbar">
@@ -17,17 +20,33 @@
         {% elif seccion == 'inventarios' %}
             <a href="/abastecimiento" class="modulo {% block nav_abast %}{% endblock %}">ABASTECIMIENTO</a>
             <a href="/reparto" class="modulo {% block nav_reparto %}{% endblock %}">REPARTO</a>
-        <!--{% elif seccion == 'calidad' %}
+        {#{% elif seccion == 'calidad' %}
             <a href="/calidad/registro" class="modulo {% block nav_calidad %}{% endblock %}">REGISTRO</a>
             <a href="/calidad/dashboard" class="modulo {% block nav_dashboard %}{% endblock %}">DASHBOARD</a>
-            <a href="/calidad/equipos" class="modulo {% block nav_equipos %}{% endblock %}">EQUIPOS</a>-->
+            <a href="/calidad/equipos" class="modulo {% block nav_equipos %}{% endblock %}">EQUIPOS</a>#}
         {% else %}
             <a href="/compras" class="modulo">COMPRAS</a>
             <a href="/inventarios" class="modulo">INVENTARIOS</a>
-            <!--<a href="/calidad/registro" class="modulo">CALIDAD</a>-->
+            {#<a href="/calidad/registro" class="modulo">CALIDAD</a>#}
         {% endif %}
+        <button type="button" id="btn-tema" class="btn-tema" title="Cambiar tema"></button>
+        <script>
+            const btnTema = document.getElementById("btn-tema");
+            function pintarBotonTema(){
+                //en oscuro muestra el sol (pasar a claro); en claro, la luna (pasar a oscuro)
+                btnTema.textContent = document.documentElement.dataset.theme === "light" ? "🌙" : "☀️";
+            }
+            btnTema.addEventListener("click", () => {
+                const nuevo = document.documentElement.dataset.theme === "light" ? "dark": "light";
+                document.documentElement.dataset.theme = nuevo;
+                localStorage.setItem("tema", nuevo);
+                pintarBotonTema();
+            });
+            pintarBotonTema();
+        </script>
     </div>
     </nav>
     {% block content %}{% endblock %}
+
 </body>
 </html>

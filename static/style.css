@@ -8,6 +8,20 @@
     --blue: #58a6ff;
     --red: #f85149;
     --amber: #d29922;
+    --overlay: rgba(11, 15, 20, 0.9);
+}
+
+[data-theme="light"]{
+    --bg: #f6f8fa;
+    --panel: #ffffff;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --muted: #57606a;
+    --green: #1a7f37;
+    --blue: #0969da;
+    --red: #cf222e;
+    --amber: #9a6700;
+    --overlay: rgba(246, 248, 250, 0.9)
 }
 
 body {
@@ -97,6 +111,18 @@ button {
     font-weight: 600;
     cursor: pointer;
 }
+
+.btn-tema {
+    margin-top: 0;
+    padding: 6px 12px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
 button:hover {
     opacity: 0.9;
 }
@@ -238,7 +264,7 @@ td:nth-child(2), td:nth-child(3) {
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(11, 15, 20, 0.9);
+    background: var(--overlay);
     align-items: center;
     justify-content: center;
     flex-direction: column;
