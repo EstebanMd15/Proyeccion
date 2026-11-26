@@ -2,10 +2,13 @@ import io
 from fastapi import FastAPI, Request, File, UploadFile, Form
 from fastapi.templating import Jinja2Templates
 from datetime import date
+
 from fastapi.responses import StreamingResponse, JSONResponse
 from Scripts.main import cargar_datos, exportar_excel
 from Scripts.comun.lectura import leer_con_encabezado, leer_csv_pipe
 from Scripts.processor import ProyeccionProcessor
+from Scripts.comun.maestro import medicamentos_comerciales, codigos_fomag_desde_archivo
+
 from fastapi.staticfiles import StaticFiles
 import uuid
 import pandas as pd
@@ -197,11 +200,11 @@ def abastecimiento_reparto(
         df_maestro = leer_con_encabezado(maestro.file, 'Codigo')
         df_fomag = leer_csv_pipe(cto_fomag.file, 'Código Articulo', cols=['Nro. Contrato',
                                                                           'Código Articulo', 'Estado Referencia', 'Codigo Padre', 'Código Cum.1'])
-        comerciales = abastecimiento.medicamentos_comerciales(df_maestro)
+        comerciales = medicamentos_comerciales(df_maestro)
         mol_map = abastecimiento.molecula_por_codigo(df_todo)
         stock_cedi = abastecimiento.stock_cedi_desde_archivo(df_cedi)
         pedidos = abastecimiento.pedidos_canal_desde_proyeccion(df_todo)
-        codigos_fomag = abastecimiento.codigos_fomag_desde_archivo(df_fomag, df_maestro, comerciales)
+        codigos_fomag = codigos_fomag_desde_archivo(df_fomag, df_maestro, comerciales)
         trans = abastecimiento.transito_desde_archivo(df_transito)
         rec = None
         if recibidos is not None and recibidos.filename:
@@ -251,8 +254,8 @@ def mejor_opcion_generar(
         df_cto_fomag = leer_csv_pipe(cto_fomag.file, 'Código Articulo', cols=['Nro. Contrato',
                                                                               'Código Articulo', 'Estado Referencia', 'Codigo Padre', 'Código Cum.1'])
 
-        comerciales = abastecimiento.medicamentos_comerciales(df_maestro)
-        codigos_fomag = abastecimiento.codigos_fomag_desde_archivo(df_cto_fomag, df_maestro, comerciales)
+        comerciales = medicamentos_comerciales(df_maestro)
+        codigos_fomag = codigos_fomag_desde_archivo(df_cto_fomag, df_maestro, comerciales)
 
         if 'Pendientes_FOMAG' not in df_proyeccion.columns:
             return JSONResponse({"error": "Genera una Proyección nueva, esta no trae los pendientes_FOMAG"},
