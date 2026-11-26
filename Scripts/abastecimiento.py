@@ -1,26 +1,17 @@
 from Scripts import config
 import numpy as np
 import pandas as pd
-import re
 
 from openpyxl.styles import PatternFill
 from Scripts.config import CONTRATO_FOMAG_VIGENTE
+from Scripts.comun.excel import limpiar_df
 
-_CHARS_ILEGALES = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F]')
 COLORES_ESTADO = {'SE ENVIA': 'D9EAD3', 'NO SE ENVIA': 'FF9B9B', 'SIN STOCK': 'FFE699', 'SIN ROTACIÓN': 'D9D9D9'}
 MESES_ES = {'01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr', '05': 'May', '06': 'Jun',
             '07': 'Jul', '08': 'Ago', '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dic'}
 # Columnas del Maestro con las marcas S/N y el nombre con el que salen en el Excel
 MARCAS_MAESTRO = {'Refrigerado?': 'Cadena de Frío', 'Medicamento de alto costo': 'Alto Costo',
                   'Restringido o controlado': 'MCE'}
-
-def _limpiar(d):
-    d = d.copy()
-    for c in d.columns:
-        if pd.api.types.is_numeric_dtype(d[c]) or pd.api.types.is_datetime64_any_dtype(d[c]):
-            continue
-        d[c] = d[c].astype(str).str.replace(_CHARS_ILEGALES, '', regex=True)
-    return d
 
 def ponderar_prescrita(df, col_periodo='PERIODO', col_codigo='CODIGO',
                        col_bodega='CODIGO BODEGA', col_cantidad='CONSUMO TOTAL',
@@ -321,17 +312,17 @@ def exportar(matriz, matriz_transito, rep, enviado, pesos, disp, info, tabla_pes
 
     renombres = {cod: f'{cod} - {suc}' for cod, suc in config.BODEGAS_ABASTECIMIENTO.items()}
     with pd.ExcelWriter(ruta, engine='openpyxl') as writer:
-        _limpiar(reservas).to_excel(writer, sheet_name='Reservas', index=False)
-        _limpiar(matriz).rename(columns=renombres).to_excel(writer, sheet_name='Global', index=False)
-        _limpiar(matriz_transito).rename(columns=renombres).to_excel(writer, sheet_name='Tránsito', index=False)
+        limpiar_df(reservas).to_excel(writer, sheet_name='Reservas', index=False)
+        limpiar_df(matriz).rename(columns=renombres).to_excel(writer, sheet_name='Global', index=False)
+        limpiar_df(matriz_transito).rename(columns=renombres).to_excel(writer, sheet_name='Tránsito', index=False)
         for zona, bodegas in config.ZONAS_ABASTECIMIENTO.items():
-            sub = _limpiar(hoja_zona(consumos, rep, enviado, pesos, disp, info, bodegas, pendientes=pendientes,
+            sub = limpiar_df(hoja_zona(consumos, rep, enviado, pesos, disp, info, bodegas, pendientes=pendientes,
                                      stock_puntos=stock_puntos))
             sub.to_excel(writer, sheet_name=zona[:31], index=False)
             pintar_estado(writer.sheets[zona[:31]])
             poner_filtro(writer.sheets[zona[:31]])
-        _limpiar(_hoja_lotes(asignacion)).to_excel(writer, sheet_name='Lotes', index=False)
-        _limpiar(consumos).to_excel(writer, sheet_name='Consumos', index=False)
+        limpiar_df(_hoja_lotes(asignacion)).to_excel(writer, sheet_name='Lotes', index=False)
+        limpiar_df(consumos).to_excel(writer, sheet_name='Consumos', index=False)
         poner_filtro(writer.sheets['Consumos'])
         tabla_pesos.to_excel(writer, sheet_name='Pesos', index=False)
     return ruta

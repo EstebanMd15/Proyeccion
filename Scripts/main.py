@@ -9,8 +9,7 @@ from Scripts.config import RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES, RUT
     RUTA_MOLECULAS, RUTA_PENDIENTES_REM, RUTA_PENDIENTES_DISP, TEXTO_MATRIZ, CODIGOS_MATRIZ_RIESGO
 from Scripts.processor import ProyeccionProcessor
 from Scripts.comun.lectura import leer_csv_pipe, leer_con_encabezado
-
-_CHARS_ILEGALES = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F]')
+from Scripts.comun.excel import limpiar_df
 
 # Fila de procedencia: de donde sale cada columna. Se escribe encima de los
 # titulos para que cualquiera entienda el origen del dato sin preguntar.
@@ -106,15 +105,6 @@ def _descripcion_columna(col):
     if m:
         return f"{m.group(1)} - Consumo del mes (uno de los 3 meses del cálculo 50/30/20)"
     return ''
-
-def _limpiar_df(df):
-    """Quita caracteres de control que openpyxl rechaza."""
-    df = df.copy()
-    for col in df.columns:
-        if pd.api.types.is_numeric_dtype(df[col]) or pd.api.types.is_datetime64_any_dtype(df[col]):
-            continue
-        df[col] = df[col].astype(str).str.replace(_CHARS_ILEGALES, '', regex=True)
-    return df
 
 def cargar_datos(RUTA_MAESTRO, RUTA_DISPENSACION, RUTA_REMISIONES, RUTA_STOCK_BODEGA,
                  RUTA_STOCK_PUNTOS, RUTA_MOLECULAS, RUTA_PENDIENTES_DISP=None, RUTA_PENDIENTES_REM=None,):
@@ -323,7 +313,7 @@ def exportar_excel(processor, ruta=None, buffer=None):
     def _escribir(destino):
         with pd.ExcelWriter(destino, engine='openpyxl') as writer:
             for nombre, sub in hojas.items():
-                sub = _limpiar_df(sub)
+                sub = limpiar_df(sub)
                 # startrow=1 deja libre la fila 1 para la procedencia;
                 # los titulos quedan en la fila 2 y los datos desde la 3.
                 sub.to_excel(writer, sheet_name=nombre[:31], index=False, startrow=1)
