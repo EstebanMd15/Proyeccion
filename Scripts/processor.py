@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 
 from Scripts import config
+from Scripts.comun.fechas import MESES_ES, etiqueta_mes
 
 
 class ProyeccionProcessor:
@@ -18,9 +19,6 @@ class ProyeccionProcessor:
 
     COLS_MAESTRO_INFO = ('Grupo', 'Nombre Ult Proveedor', 'Ultimo Costo', 'Costo Promedio')
 
-    MESES_ES = {'01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr',
-                '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Ago',
-                '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dic'}
 
     COLS_CONSUMO_DISPENSACION = (
         'Consumo_NEPS_Capita',
@@ -388,7 +386,7 @@ class ProyeccionProcessor:
             self.periodos_mensuales = list(pivot.columns)
 
         pivot = pivot.rename(columns={
-            p: f'{prefijo}{self.MESES_ES.get(str(p)[-2:], str(p)[-2:])}_{str(p)[:4]}'
+            p: f'{prefijo}{etiqueta_mes(p)}'
             for p in pivot.columns
         }).reset_index()
 
@@ -412,7 +410,7 @@ class ProyeccionProcessor:
         for contrato, df, col in fuentes:
             pivot = (df[df['PERIODO'].isin(meses)]
             .pivot_table(index='Codigo', columns='PERIODO', values=col, aggfunc='sum', fill_value=0).reindex(columns=meses, fill_value=0))
-            nombres = {p: f"{contrato}_{self.MESES_ES.get(str(p)[-2:], str(p)[-2:])}_{str(p)[:4]}" for p in meses}
+            nombres = {p: f"{contrato}_{etiqueta_mes(p)}" for p in meses}
             pivot = pivot.rename(columns=nombres).reset_index()
             self.maestro_consumo = pd.merge(self.maestro_consumo, pivot, on='Codigo', how='left')
             cols = list(nombres.values())
@@ -893,20 +891,20 @@ class ProyeccionProcessor:
                 setattr(self, visual_attr, df[es_ultimo].copy())
                 setattr(self, attr, df[~es_ultimo].copy())
         mes, anio = ultimo[-2:], ultimo[:4]
-        self.etiqueta_mes_visual = f"{self.MESES_ES.get(mes, mes)}_{anio}"
+        self.etiqueta_mes_visual = f"{MESES_ES.get(mes, mes)}_{anio}"
 
     def agregar_consumo_visual(self, consumo_disp_visual=None, consumo_rem_visual=None,
-                               etiqueta_mes=None):
-        if self.maestro_consumo is None or etiqueta_mes is None:
+                               etiqueta=None):
+        if self.maestro_consumo is None or etiqueta is None:
             return
 
-        col_total = f'Consumo_{etiqueta_mes}'
+        col_total = f'Consumo_{etiqueta}'
         self.maestro_consumo[col_total] = 0.0
 
         fuentes = [
-            (consumo_disp_visual, 'CONSUMO_TOTAL', f"Consumo_Disp_{etiqueta_mes}",
+            (consumo_disp_visual, 'CONSUMO_TOTAL', f"Consumo_Disp_{etiqueta}",
              'cols_consumo_mensual_disp'),
-            (consumo_rem_visual, 'CONSUMO_TOTAL_GENERAL', f"Consumo_Rem_{etiqueta_mes}",
+            (consumo_rem_visual, 'CONSUMO_TOTAL_GENERAL', f"Consumo_Rem_{etiqueta}",
              'cols_consumo_mensual_rem'),
         ]
         for df_visual, col_valor, nombre_col, lista_attr in fuentes:
@@ -962,7 +960,7 @@ class ProyeccionProcessor:
         self.aplicar_redondeo_empaque()
         if getattr(self, 'etiqueta_mes_visual', None) is not None:
             self.agregar_consumo_visual(self.consumo_dispensacion_visual, self.consumo_remisiones_visual,
-                                        etiqueta_mes=self.etiqueta_mes_visual)
+                                        etiqueta=self.etiqueta_mes_visual)
 
 
     def imprimir_resumen_contratos(self):

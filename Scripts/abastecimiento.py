@@ -5,10 +5,10 @@ import pandas as pd
 from openpyxl.styles import PatternFill
 from Scripts.config import CONTRATO_FOMAG_VIGENTE
 from Scripts.comun.excel import limpiar_df
+from Scripts.comun.fechas import etiqueta_mes
 
 COLORES_ESTADO = {'SE ENVIA': 'D9EAD3', 'NO SE ENVIA': 'FF9B9B', 'SIN STOCK': 'FFE699', 'SIN ROTACIÓN': 'D9D9D9'}
-MESES_ES = {'01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr', '05': 'May', '06': 'Jun',
-            '07': 'Jul', '08': 'Ago', '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dic'}
+
 # Columnas del Maestro con las marcas S/N y el nombre con el que salen en el Excel
 MARCAS_MAESTRO = {'Refrigerado?': 'Cadena de Frío', 'Medicamento de alto costo': 'Alto Costo',
                   'Restringido o controlado': 'MCE'}
@@ -290,7 +290,7 @@ def hoja_consumos(df, codigos_fomag, info, col_periodo='PERIODO', col_codigo='CO
     fom = fom.assign(Pond=fom[col_cantidad] * fom[col_periodo].map(pesos_mes))
     h['Demanda FOMAG'] = fom.groupby(llaves)['Pond'].sum().reindex(h.index).fillna(0)
     h['Demanda NUEVA EPS'] = (h['Demanda Mensual'] - h['Demanda FOMAG']).clip(lower=0)
-    etiquetas ={m: f'{MESES_ES.get(str(m)[-2:], str(m)[-2:])}_{str(m)[:4]}' for m in meses + visual}
+    etiquetas ={m: etiqueta_mes(m) for m in meses + visual}
     etiquetas.update({m: f'{etiquetas[m]} (visual)' for m in visual})
     h = h.round(1).rename(columns=etiquetas).reset_index()
 
