@@ -3,7 +3,8 @@ from fastapi import FastAPI, Request, File, UploadFile, Form
 from fastapi.templating import Jinja2Templates
 from datetime import date
 from fastapi.responses import StreamingResponse, JSONResponse
-from Scripts.main import cargar_datos, exportar_excel, leer_con_encabezado, leer_csv_pipe
+from Scripts.main import cargar_datos, exportar_excel
+from Scripts.comun.lectura import leer_con_encabezado, leer_csv_pipe
 from Scripts.processor import ProyeccionProcessor
 from fastapi.staticfiles import StaticFiles
 import uuid
