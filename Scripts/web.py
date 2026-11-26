@@ -180,7 +180,8 @@ def abastecimiento_reparto(
         maestro: UploadFile | None = File(None),
         cto_fomag: UploadFile | None = File(None),
         recibidos: UploadFile | None = File(None),
-        pendientes: UploadFile | None = File(None),):
+        pendientes: UploadFile | None = File(None),
+        valorizado_puntos: UploadFile | None = File(None),):
 
     faltantes = [n for n, f in {"consumo": consumo, "cedi": cedi, "proyeccion": proyeccion,
                                 "transito": transito, "maestro": maestro, 'cto_fomag': cto_fomag}.items()
@@ -209,13 +210,16 @@ def abastecimiento_reparto(
             pend = abastecimiento.pendientes_desde_archivo(leer_csv_pipe(pendientes.file, 'Cod. Artículo', cols=[
                 'Cod. Artículo', 'Bodega', 'Npmbre EPS', 'Cant. Pendiente'
             ]))
+        stk = None
+        if valorizado_puntos is not None and valorizado_puntos.filename:
+            stk = abastecimiento.stock_puntos_desde_archivo(leer_con_encabezado(valorizado_puntos.file, 'Codigo Articulo'))
         info = abastecimiento.info_producto_desde_maestro(df_maestro)
         unidades = abastecimiento.obtener_unidades_redondeo(df_maestro)
 
         buffer = io.BytesIO()
         abastecimiento.generar_abastecimiento(df_consumo, stock_cedi, pedidos,
                                               codigos_fomag, trans, info, buffer, mol_map, df_cedi, comerciales,
-                                              rec, unidades=unidades, pendientes=pend)
+                                              rec, unidades=unidades, pendientes=pend, stock_puntos=stk)
         buffer.seek(0)
     except Exception as e:
         return JSONResponse({"error": "No se pudo generar el reparto. Revisa que los archivos sean el Consumo, "

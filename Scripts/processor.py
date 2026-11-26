@@ -397,6 +397,28 @@ class ProyeccionProcessor:
         self.maestro_consumo[cols] = self.maestro_consumo[cols].fillna(0)
         return cols
 
+    def calcular_consumo_3m_contrato(self):
+        """Consumo de los 3 meses del calculo (los del 50/30/20) por contrato:
+                NEPS (Capita + Evento), FOMAG y Remisiones. Solo informativo."""
+        self.cols_consumo_3m = {'NEPS': [], 'FOMAG': [], 'REMISIONES': []}
+        disp, rem = self.consumo_dispensacion, self.consumo_remisiones
+        meses = sorted(disp['PERIODO'].unique())[-3:]
+
+        fuentes = [
+            ('NEPS', disp[disp["Segmento"].isin(['NEPS - CAPITA', 'NEPS - EVENTO'])], 'Consumo_Dispensacion'),
+            ('FOMAG', disp[disp['Segmento'] == 'FOMAG - EVENTO'], 'Consumo_Dispensacion'),
+            ('REMISIONES', rem, 'Consumo_Remisiones'),
+        ]
+        for contrato, df, col in fuentes:
+            pivot = (df[df['PERIODO'].isin(meses)]
+            .pivot_table(index='Codigo', columns='PERIODO', values=col, aggfunc='sum', fill_value=0).reindex(columns=meses, fill_value=0))
+            nombres = {p: f"{contrato}_{self.MESES_ES.get(str(p)[-2:], str(p)[-2:])}_{str(p)[:4]}" for p in meses}
+            pivot = pivot.rename(columns=nombres).reset_index()
+            self.maestro_consumo = pd.merge(self.maestro_consumo, pivot, on='Codigo', how='left')
+            cols = list(nombres.values())
+            self.maestro_consumo[cols] = self.maestro_consumo[cols].fillna(0)
+            self.cols_consumo_3m[contrato] = cols
+
     def calcular_consumo_molecula(self):
         self.molecula_compra['Codigo'] = self.molecula_compra['Codigo'].astype(str).str.strip()
 
@@ -420,6 +442,8 @@ class ProyeccionProcessor:
             .astype(int)
             .astype(str)
         )
+        hijos = self.maestro_consumo.groupby('Codigo_Molecula')['Codigo'].transform('count')
+        self.maestro_consumo['Hijos Molecula'] = hijos.where(self.maestro_consumo['Codigo_Molecula'] != '0', 1)
 
     @staticmethod
     def _pareto_abc(serie, umbral_A=80, umbral_M=95):
@@ -930,6 +954,7 @@ class ProyeccionProcessor:
         self.consolidar_consumos()
         self.construir_base()
         self.calcular_consumo_mensual()
+        self.calcular_consumo_3m_contrato()
         self.calcular_consumo_molecula()
         self.calcular_rotacion()
         self.calcular_rotacion_por_canal()

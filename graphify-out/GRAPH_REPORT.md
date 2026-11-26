@@ -1,17 +1,17 @@
-# Graph Report - Proyeccion  (2026-11-19)
+# Graph Report - Proyeccion  (2026-11-25)
 
 ## Corpus Check
-- 15 files · ~20,919 words
+- 15 files · ~21,835 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 3 file(s) not represented in the graph (top: (none) 1, .toml 1, .css 1)
 
 ## Summary
-- 275 nodes · 586 edges · 9 communities (8 shown, 1 thin omitted)
+- 279 nodes · 594 edges · 9 communities (8 shown, 1 thin omitted)
 - Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 39 edges (avg confidence: 0.89)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `47a03d38`
+- Built from commit: `1c7c09d8`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -27,9 +27,9 @@
 - main.py
 
 ## God Nodes (most connected - your core abstractions)
-1. `ProyeccionProcessor` - 36 edges
+1. `ProyeccionProcessor` - 37 edges
 2. `generar_abastecimiento()` - 19 edges
-3. `abastecimiento_reparto()` - 17 edges
+3. `abastecimiento_reparto()` - 18 edges
 4. `generar_mejor_opcion()` - 11 edges
 5. `dashboard()` - 10 edges
 6. `generar()` - 10 edges
@@ -62,23 +62,23 @@
 
 ### Community 0 - "Motor de Abastecimiento (Reparto)"
 Cohesion: 0.08
-Nodes (39): asignar_lotes(), calcular_disponible(), calcular_pesos(), codigos_fomag_desde_archivo(), construir_matriz(), construir_matriz_transito(), construir_reservas(), cubrir_faltante_molecula() (+31 more)
+Nodes (35): asignar_lotes(), calcular_disponible(), calcular_pesos(), codigos_fomag_desde_archivo(), construir_matriz(), construir_matriz_transito(), construir_reservas(), cubrir_faltante_molecula() (+27 more)
 
 ### Community 2 - "API Web y Consultas BD"
-Cohesion: 0.18
-Nodes (20): consultar_abastecimiento(), consultar_dispensacion(), consultar_remisiones(), get_engine(), periodos_cargados(), abastecimiento_consumo(), abastecimiento_pagina(), compras_pagina() (+12 more)
+Cohesion: 0.13
+Nodes (25): consultar_abastecimiento(), consultar_dispensacion(), consultar_remisiones(), get_engine(), periodos_cargados(), cargar_datos(), leer_con_encabezado(), leer_csv_pipe() (+17 more)
 
 ### Community 3 - "Formularios Web y Dependencias"
-Cohesion: 0.10
-Nodes (28): fastapi, jinja2, openpyxl 3.1.5, pandas 3.0.3, PyMySQL, python-multipart, SQLAlchemy, streamlit 1.60.0 (+20 more)
+Cohesion: 0.08
+Nodes (33): fastapi, jinja2, openpyxl 3.1.5, pandas 3.0.3, PyMySQL, python-multipart, SQLAlchemy, streamlit 1.60.0 (+25 more)
 
 ### Community 4 - "mejor_opcion.py"
 Cohesion: 0.15
 Nodes (11): calcular_mejor_opcion(), candidatos(), _cod(), _empates(), exportar(), _fila(), generar_mejor_opcion(), lp_desde_archivo() (+3 more)
 
 ### Community 5 - "Paginas de Consumo y Navegacion"
-Cohesion: 0.14
-Nodes (15): descargarConsumoAbastecimiento(), GET /abastecimiento/consumo, GET /rotacion/periodos, etiquetaPeriodo(), llenarSelect(), seccion template variable, Topbar navigation by seccion, descargarRotacion() (+7 more)
+Cohesion: 0.21
+Nodes (10): GET /rotacion/periodos, etiquetaPeriodo(), llenarSelect(), seccion template variable, Topbar navigation by seccion, etiquetaPeriodo(), llenarSelect(), poblarPorTipo() (+2 more)
 
 ### Community 6 - "Configuracion de Graphify"
 Cohesion: 0.31
@@ -98,24 +98,24 @@ Nodes (8): _cols_pendientes(), construir_hojas(), _descripcion_columna(), export
 
 ## Knowledge Gaps
 - **10 isolated node(s):** `pandas 3.0.3`, `streamlit 1.60.0`, `Cobertura, lead time and seguridad parameters`, `Optional pendientes files (pend_disp, pend_com)`, `Umbrales de rotacion A/M` (+5 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 64 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 66 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **1 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `ProyeccionProcessor` connect `Motor de Proyeccion de Compras` to `main.py`, `Motor de Abastecimiento (Reparto)`, `API Web y Consultas BD`, `mejor_opcion.py`?**
-  _High betweenness centrality (0.182) - this node is a cross-community bridge._
+- **Why does `ProyeccionProcessor` connect `Motor de Proyeccion de Compras` to `main.py`, `API Web y Consultas BD`, `mejor_opcion.py`?**
+  _High betweenness centrality (0.189) - this node is a cross-community bridge._
 - **Are the 3 inferred relationships involving `ProyeccionProcessor` (e.g. with `_valorizar_estado()` and `calcular_mejor_opcion()`) actually correct?**
   _`ProyeccionProcessor` has 3 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `pandas 3.0.3`, `streamlit 1.60.0`, `Cobertura, lead time and seguridad parameters` to the rest of the system?**
   _10 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Motor de Abastecimiento (Reparto)` be split into smaller, more focused modules?**
-  _Cohesion score 0.07743496672716274 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.08295625942684766 - nodes in this community are weakly interconnected._
 - **Why does `dashboard()` connect `calidad_temp.py` to `Motor de Abastecimiento (Reparto)`?**
   _High betweenness centrality (0.022) - this node is a cross-community bridge._
 - **Should `Motor de Proyeccion de Compras` be split into smaller, more focused modules?**
-  _Cohesion score 0.08846153846153847 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.08362369337979095 - nodes in this community are weakly interconnected._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._

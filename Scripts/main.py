@@ -16,6 +16,7 @@ _CHARS_ILEGALES = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F]')
 # titulos para que cualquiera entienda el origen del dato sin preguntar.
 DESCRIPCIONES_COLUMNAS = {
     # --- identificacion (archivo Maestro / BD) ---
+    'Cum': 'Maestro - Código CUM del producto',
     'Codigo': 'Maestro (BD) - codigo del articulo',
     'Nombre': 'Maestro (BD) - nombre del articulo',
     'Grupo': 'Maestro (BD) - laboratorio',
@@ -24,6 +25,7 @@ DESCRIPCIONES_COLUMNAS = {
     'Costo Promedio': 'Maestro (BD) - costo promedio',
     'Codigo_Molecula': 'Archivo Molecula_Compra - codigo de molecula',
     'Molecula': 'Archivo Molecula_Compra - nombre de molecula',
+    'Hijos Molecula': 'Calculado - Cantidad de códigos de maestro con la misma molécula',
     'N_Productos': 'Calculado - numero de productos en la molecula',
     # --- consumo por canal / contrato ---
     'Consumo_NEPS_Capita': 'Dispensacion - cliente NUEVA EPS + servicio CAPITADO',
@@ -101,6 +103,9 @@ def _descripcion_columna(col):
         return 'Remisiones - consumo del mes'
     if re.match(r'Consumo_[A-Za-z]{3}_\d{4}$', col):
         return 'Dispensacion + Remisiones - consumo del mes'
+    m = re.match(r'(NEPS|FOMAG|REMISIONES)_[A-Za-z]{3}_\d{4}$', col)
+    if m:
+        return f"{m.group(1)} - Consumo del mes (uno de los 3 meses del cálculo 50/30/20)"
     return ''
 
 
@@ -202,6 +207,8 @@ def construir_hojas(processor):
     codigo_com = {str(c).strip() for c in CODIGOS_MATRIZ_RIESGO}
     df['Comentario'] = (df['Codigo'].astype(str).str.strip().isin(codigo_com).map({True: TEXTO_MATRIZ, False: ''}))
     mensuales = list(getattr(processor, 'cols_consumo_mensual', []))
+    c3m = getattr(processor, 'cols_consumo_3m', {})
+    tres_meses = c3m.get('NEPS', []) + c3m.get('FOMAG', []) + c3m.get('REMISIONES', [])
     mensuales_disp = list(getattr(processor, 'cols_consumo_mensual_disp', []))
     mensuales_rem = list(getattr(processor, 'cols_consumo_mensual_rem', []))
     pedir_contratos = list(processor.SEGMENTOS_CONTRATO.values())
@@ -212,9 +219,9 @@ def construir_hojas(processor):
 
     # ---------------------------------------------------------- DISPENSACION
 
-    colsDisp =['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula','Categoria Medicamento','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
+    colsDisp =['Cum','Codigo', 'Nombre', 'Codigo_Molecula', 'Hijos Molecula','Molecula','Categoria Medicamento','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
             'Costo Promedio', 'Ultimo Costo', 'Consumo_NEPS_Capita','Consumo_NEPS_Evento',
-            'Consumo_FOMAG_Evento', 'Consumo_Sin_Clasificar', 'Consumo_Dispensacion_Total',
+            'Consumo_FOMAG_Evento', *c3m.get('NEPS', []), *c3m.get('FOMAG', []),'Consumo_Sin_Clasificar', 'Consumo_Dispensacion_Total',
             *mensuales_disp, 'Demanda_Disp_Mensual', 'Rotacion_Dispensacion', 'Rotacion_FOMAG',
             'Rotacion_NEPS_Evento', 'Rotacion_NEPS_Capita', 'Stock_Bodega_Principal',
             'Stock_Puntos_Dispensacion', 'Stock_Total', 'Necesidad_Disp', 'Pedir_NEPS_Capita', 'Pedir_NEPS_Evento',
@@ -228,7 +235,7 @@ def construir_hojas(processor):
     # ------------------------------------------------------------ REMISIONES
     # Remisiones son clientes distintos: el stock de puntos NO les aplica (ni se
     # muestra ni interviene en el pedido). Solo bodega principal.
-    colsRem = ['Codigo', 'Nombre', 'Codigo_Molecula', 'Molecula','Categoria Medicamento','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
+    colsRem = ['Cum','Codigo', 'Nombre', 'Codigo_Molecula', 'Hijos Molecula', 'Molecula','Categoria Medicamento','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
                'Costo Promedio', 'Ultimo Costo', *mensuales_rem, 'Consumo_Remisiones','Demanda_Rem_Mensual',
                'Rotacion_Remisiones','Stock_Bodega_Principal', 'Bodega_Disponible_Comercial', 'Necesidad_Rem','Pedir_Remisiones',
                'Estado', 'Valorizado Ult Costo', 'Valorizado Promedio', 'Pendientes_Comercial']
@@ -239,10 +246,10 @@ def construir_hojas(processor):
     hojas['Remisiones'] = rem
 
     # ------------------------------------------------------------------ TODO
-    colsTodo = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Categoria Medicamento','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
+    colsTodo = ['Cum','Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Hijos Molecula', 'Molecula','Categoria Medicamento','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
                 'Costo Promedio', 'Ultimo Costo', 'Consumo_Molecula', 'Consumo_NEPS_Capita',
                 'Consumo_NEPS_Evento', 'Consumo_FOMAG_Evento', 'Consumo_Dispensacion_Total',
-                'Consumo_Remisiones', *mensuales, 'Consumo_Acum',
+                'Consumo_Remisiones', *mensuales, 'Consumo_Acum', *tres_meses,
                 'Rotacion', 'Rotacion_Dispensacion', 'Rotacion_Remisiones', 'Rotacion_FOMAG',
                 'Rotacion_NEPS_Evento', 'Rotacion_NEPS_Capita', 'Demanda_Disp_Mensual',
                 'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria',
@@ -254,10 +261,10 @@ def construir_hojas(processor):
                      .sort_values('Cantidad a Pedir', ascending=False))
 
     # -------------------------------------------------------------- TODO SIN CEDI
-    colsTodoSinCedi = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Categoria Medicamento','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
+    colsTodoSinCedi = ['Cum','Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Hijos Molecula', 'Molecula','Categoria Medicamento','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
                 'Costo Promedio', 'Ultimo Costo', 'Consumo_Molecula', 'Consumo_NEPS_Capita',
                 'Consumo_NEPS_Evento', 'Consumo_FOMAG_Evento', 'Consumo_Dispensacion_Total',
-                'Consumo_Remisiones', *mensuales, 'Consumo_Acum',
+                'Consumo_Remisiones', *mensuales, 'Consumo_Acum', *tres_meses,
                 'Rotacion', 'Rotacion_Dispensacion', 'Rotacion_Remisiones', 'Rotacion_FOMAG',
                 'Rotacion_NEPS_Evento', 'Rotacion_NEPS_Capita','Demanda_Disp_Mensual',
                 'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria',
@@ -274,10 +281,10 @@ def construir_hojas(processor):
     )
 
     #--------------------------------------------------------------- TODO SIN PUNTOS
-    colsTodoSinPuntos = ['Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Molecula','Categoria Medicamento','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
+    colsTodoSinPuntos = ['Cum','Codigo', 'Nombre','Presentación', 'Codigo_Molecula', 'Hijos Molecula', 'Molecula','Categoria Medicamento','Nombre Comercial', 'Grupo', 'Nombre Ult Proveedor',
                 'Costo Promedio', 'Ultimo Costo', 'Consumo_Molecula', 'Consumo_NEPS_Capita',
                 'Consumo_NEPS_Evento', 'Consumo_FOMAG_Evento', 'Consumo_Dispensacion_Total',
-                'Consumo_Remisiones', *mensuales, 'Consumo_Acum',
+                'Consumo_Remisiones', *mensuales, 'Consumo_Acum', *tres_meses,
                 'Rotacion', 'Rotacion_Dispensacion', 'Rotacion_Remisiones', 'Rotacion_FOMAG',
                 'Rotacion_NEPS_Evento', 'Rotacion_NEPS_Capita', 'Demanda_Disp_Mensual',
                 'Demanda_Rem_Mensual','Demanda_Mensual','Demanda_Diaria',

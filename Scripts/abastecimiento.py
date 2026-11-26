@@ -75,27 +75,54 @@ def calcular_pesos(pond, col_codigo='CODIGO'):
 
     return pond
 
-def descontar_enviado(pond, enviado, mol_map, col_codigo='CODIGO', col_bodega='CODIGO BODEGA'):
-    """Demanda pendiente de cada punto = Demanda mensual - lo ya enviado (Tránsito + recibido desde el
-    abastecimiento 1). Lo que un código recibió de más (por ejemplo, como suplente) se le descuenta a los otros
-    códigos de su misma molécula en ese punto. La parte FOMAG baja en la misma proporción"""
+def descontar_enviado(pond, enviado, mol_map, codigos_fomag=None, comerciales=None,
+                      col_codigo='CODIGO', col_bodega='CODIGO BODEGA'):
+    """Demanda pendiente de cada punto = Demanda mensual - lo que ya lo cubre (Tránsito + recibido desde el
+    abastecimiento 1, o Tránsito + stock del punto si se cargó el Valorizado Puntos).
+    Lo que a un código le sobra en el punto se le descuenta a los otros códigos de su misma molécula, con la
+    regla FOMAG: un código habilitado cubre primero la parte FOMAG y luego la de Nueva EPS; uno no habilitado
+    solo cubre la de Nueva EPS; un comercial no habilitado no cubre a otros."""
+    codigos_fomag = set(codigos_fomag) if codigos_fomag is not None else set()
+    comerciales = set(comerciales) if comerciales is not None else set()
     llaves = [col_codigo, col_bodega]
     pond = pond.merge(enviado, on=llaves, how='outer')
-    pond[['Ponderado', 'Ponderado_Fomag', 'Enviado']] = pond[['Ponderado', 'Ponderado_Fomag', 'Enviado']].fillna(0)
+    num = ['Ponderado', 'Ponderado_Fomag', 'Enviado']
+    # A número siempre: si una tabla llega vacía, la columna viene como texto y las divisiones fallan
+    pond[num] = pond[num].apply(pd.to_numeric, errors='coerce').fillna(0).astype(float)
     pendiente = (pond['Ponderado'] - pond['Enviado']).clip(lower=0)
     sobra = (pond['Enviado'] - pond['Ponderado']).clip(lower=0)
 
+    # Lo que le falta a cada código, partido entre FOMAG y Nueva EPS en la misma proporción de su demanda
+    pend_f = (pendiente * pond['Ponderado_Fomag'] / pond['Ponderado']).where(pond['Ponderado'] > 0, 0)
+    pend_f = np.minimum(pend_f, pendiente)
+    pend_o = pendiente - pend_f
+
+    # Quién puede cubrir qué con lo que le sobra
+    hab = pond[col_codigo].isin(codigos_fomag)
+    no_suple = pond[col_codigo].isin(comerciales - codigos_fomag)
+    sobra_hab = sobra.where(hab, 0)
+    sobra_neps = sobra.where(~hab & ~no_suple, 0)
+
+    # Totales por molécula + punto (los códigos sin molécula no cubren ni son cubiertos)
     mol = pond[col_codigo].map(mol_map)
     mol = mol.where(mol.notna() & ~mol.isin(['nan', '0', '']))
     grupo = [mol, pond[col_bodega]]
-    sobra_mol = sobra.groupby(grupo).transform('sum').fillna(0)
-    pend_mol = pendiente.groupby(grupo).transform('sum').fillna(0)
-    cubierto = (sobra_mol / pend_mol).where(pend_mol > 0, 0).clip(upper=1)
-    pendiente = pendiente * (1 - cubierto)
+    s_hab = sobra_hab.groupby(grupo).transform('sum').fillna(0)
+    s_neps = sobra_neps.groupby(grupo).transform('sum').fillna(0)
+    pf = pend_f.groupby(grupo).transform('sum').fillna(0)
+    po = pend_o.groupby(grupo).transform('sum').fillna(0)
 
-    factor = (pendiente / pond['Ponderado']).where(pond['Ponderado'] > 0, 0)
-    pond['Ponderado_Fomag'] = pond['Ponderado_Fomag'] * factor
-    pond['Ponderado'] = pendiente
+    # No habilitados -> solo Nueva EPS. Habilitados -> primero FOMAG y lo que les sobre, a Nueva EPS
+    cub_o1 = np.minimum(s_neps, po)
+    cub_f = np.minimum(s_hab, pf)
+    cub_o2 = np.minimum(s_hab - cub_f, po - cub_o1)
+    f_f = (cub_f / pf).where(pf > 0, 0)
+    f_o = ((cub_o1 + cub_o2) / po).where(po > 0, 0)
+    pend_f = pend_f * (1 - f_f)
+    pend_o = pend_o * (1 - f_o)
+
+    pond['Ponderado_Fomag'] = pend_f
+    pond['Ponderado'] = pend_f + pend_o
     return pond[pond['Ponderado'] > 0].drop(columns='Enviado').reset_index(drop=True)
 
 def _redondear_bodegas(exacto, consumo, total, unidad, rotacion, por_blister):
@@ -222,10 +249,11 @@ def construir_reservas(disp, rep, info, col_codigo='CODIGO'):
     r['Pct_Comercial'] = (r['Pct_Comercial'] * 100).round(1)
     r = r.rename(columns={'Rotacion_Disp': 'Rotacion Disp', 'Stock_CEDI': 'Stock CEDI', 'Pct_Comercial': '% Comercial',
                           'Reserva_Comercial': 'Reserva Comercial', 'Demanda_Mensual': 'Demanda Mensual',
-                          'Demanda': 'Demanda Pendiente', 'Cubre_Molecula': 'Cubre Molecula', 'Habilitado_FOMAG': 'Habilitado FOMAG'})
+                          'Demanda': 'Demanda Pendiente', 'Cubre_Molecula': 'Cubre Molecula', 'Habilitado_FOMAG': 'Habilitado FOMAG',
+                          'Stock_Punto': 'Stock Puntos'})
     cols = [col_codigo, 'Descripción', 'Rotacion Disp', 'Habilitado FOMAG', 'Stock CEDI', 'Pedir_Disp', 'Pedir_Rem',
-            '% Comercial', 'Reserva Comercial', 'Demanda Mensual', 'Pendientes', 'Enviado', 'Demanda Pendiente',
-            'Faltante', 'Cubre Molecula', 'Disponible', 'Colchon', 'Repartido']
+            '% Comercial', 'Reserva Comercial', 'Demanda Mensual', 'Pendientes', 'Stock Puntos', 'Enviado',
+            'Demanda Pendiente', 'Faltante', 'Cubre Molecula', 'Disponible', 'Colchon', 'Repartido']
     return r[[c for c in cols if c in r.columns]].sort_values('Stock CEDI', ascending=False)
 
 def _hoja_lotes(asignacion):
@@ -289,7 +317,7 @@ def poner_filtro(ws):
     ws.freeze_panes = 'A2'
 
 def exportar(matriz, matriz_transito, rep, enviado, pesos, disp, info, tabla_pesos,
-             reservas, asignacion, consumos, ruta, pendientes=None):
+             reservas, asignacion, consumos, ruta, pendientes=None, stock_puntos=None):
 
     renombres = {cod: f'{cod} - {suc}' for cod, suc in config.BODEGAS_ABASTECIMIENTO.items()}
     with pd.ExcelWriter(ruta, engine='openpyxl') as writer:
@@ -297,7 +325,8 @@ def exportar(matriz, matriz_transito, rep, enviado, pesos, disp, info, tabla_pes
         _limpiar(matriz).rename(columns=renombres).to_excel(writer, sheet_name='Global', index=False)
         _limpiar(matriz_transito).rename(columns=renombres).to_excel(writer, sheet_name='Tránsito', index=False)
         for zona, bodegas in config.ZONAS_ABASTECIMIENTO.items():
-            sub = _limpiar(hoja_zona(consumos, rep, enviado, pesos, disp, info, bodegas, pendientes=pendientes))
+            sub = _limpiar(hoja_zona(consumos, rep, enviado, pesos, disp, info, bodegas, pendientes=pendientes,
+                                     stock_puntos=stock_puntos))
             sub.to_excel(writer, sheet_name=zona[:31], index=False)
             pintar_estado(writer.sheets[zona[:31]])
             poner_filtro(writer.sheets[zona[:31]])
@@ -336,6 +365,18 @@ def pendientes_desde_archivo(df, col_codigo="Cod. Artículo", col_bodega="Bodega
     tmp = tmp.dropna(subset=['CODIGO BODEGA'])
     pend = tmp.groupby(['CODIGO', 'CODIGO BODEGA'], as_index=False)[['Pendientes', 'Pendientes_Fomag']].sum()
     return pend[pend['Pendientes'] > 0].reset_index(drop=True)
+
+def stock_puntos_desde_archivo(df, col_codigo='Codigo Articulo', col_bodega='cod Bod', col_cantidad='Unidades'):
+    """Stock de cada código en cada punto, desde el Valorizado Puntos. El archivo ya trae el código del punto
+    (cod Bod). Los negativos cuentan como 0 y solo entran los puntos activos en config."""
+    df = df.copy()
+    codigo = df[col_codigo].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+    bodega = df[col_bodega].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+    cantidad = pd.to_numeric(df[col_cantidad], errors='coerce').fillna(0).clip(lower=0)
+    tmp = pd.DataFrame({'CODIGO': codigo, 'CODIGO BODEGA': bodega, 'Stock_Punto': cantidad})
+    tmp = tmp[tmp['CODIGO BODEGA'].isin(config.BODEGAS_ABASTECIMIENTO)]
+    stock = tmp.groupby(['CODIGO', 'CODIGO BODEGA'], as_index=False)['Stock_Punto'].sum()
+    return stock[stock['Stock_Punto'] > 0].reset_index(drop=True)
 
 def molecula_por_codigo(df_todo, col_codigo='Codigo', col_mol='Codigo_Molecula'):
     c = df_todo[col_codigo].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
@@ -402,7 +443,19 @@ def cubrir_faltante_molecula(pesos, disp, mol_map, codigos_fomag, comerciales,
         disp.loc[idx, 'Cubre_Molecula'] = toma_fomag + toma_otros
 
     if filas:
-        pesos = pd.concat([pesos] + filas, ignore_index=True)
+        nuevas = pd.concat(filas, ignore_index=True)
+        propio = disp.set_index(col_codigo)['Disponible'] # Lo que reparte cada código para su propia demanda (no se ha sumaod lo que cubre)
+        # Lo que reparte cubriendo a su molécula
+        cubre = disp.set_index(col_codigo)['Cubre_Molecula']
+        total = propio + cubre
+        #Las filas propias de los suplentes se quedan con su parte
+        es_sup = pesos[col_codigo].isin(set(nuevas[col_codigo]))
+        pesos.loc[es_sup, 'Peso'] = pesos.loc[es_sup, 'Peso'] * pesos.loc[es_sup, col_codigo].map(propio / total)
+        #Las filas nuevas se quedan con la otra parte (cubre / total)
+        nuevas['Peso'] = nuevas['Peso'] * nuevas[col_codigo].map(cubre / total)
+        # Si un suplente quedó con dos filas en el mismo punto (propia + nueva), se suman en una
+        pesos = (pd.concat([pesos, nuevas], ignore_index=True).groupby([col_codigo, col_bodega], as_index=False)
+                [['Ponderado', 'Ponderado_Fomag', 'Peso']].sum())
     disp['Disponible'] += disp['Cubre_Molecula']
     disp['Colchon'] -= disp['Cubre_Molecula']
     return pesos, disp
@@ -471,7 +524,7 @@ def asignar_lotes(rep, lotes, grupos_distancia, col_codigo='CODIGO', col_bodega=
 def generar_abastecimiento(df_prescrita,stock_cedi, pedidos,
                            codigos_fomag, transito, info,
                            ruta, mol_map, df_lotes, comerciales, recibidos=None, unidades=None,
-                           pendientes=None):
+                           pendientes=None, stock_puntos=None):
 
     pond = ponderar_prescrita(df_prescrita,
                               codigos_fomag=codigos_fomag)  # pesos 50/30/20 con filtro de códigos de FOMAG
@@ -484,21 +537,33 @@ def generar_abastecimiento(df_prescrita,stock_cedi, pedidos,
         pond['Ponderado'] = pond['Ponderado'] + pond['Pendientes']
         pond['Ponderado_Fomag'] = pond['Ponderado_Fomag'] + pond['Pendientes_Fomag']
         pond = pond.drop(columns=['Pendientes', 'Pendientes_Fomag'])
-    enviado = pd.concat(
-        [transito, recibidos]) if recibidos is not None else transito  # tránsito + recibido desde el momento 1
+    # Enviado = tránsito + recibido desde el momento 1. Con el Valorizado Puntos, lo recibido ya está dentro del
+    # stock del punto, así que solo se toma el tránsito (los recibidos siguen sirviendo para la Reserva Comercial)
+    sumar_recibidos = recibidos is not None and stock_puntos is None
+    enviado = pd.concat([transito, recibidos]) if sumar_recibidos else transito
     enviado = enviado.groupby(['CODIGO', 'CODIGO BODEGA'], as_index=False)['Transito'].sum().rename(
         columns={'Transito': 'Enviado'})
-    pendiente = descontar_enviado(pond, enviado, mol_map)  # lo que le falta a cada punto
+    # Lo que ya cubre a cada punto: lo enviado + (si se cargó) el stock que tiene el punto
+    if stock_puntos is not None:
+        cubre = pd.concat([enviado, stock_puntos.rename(columns={'Stock_Punto': 'Enviado'})])
+        cubre = cubre.groupby(['CODIGO', 'CODIGO BODEGA'], as_index=False)['Enviado'].sum()
+    else:
+        cubre = enviado
+    pendiente = descontar_enviado(pond, cubre, mol_map, codigos_fomag, comerciales)  # lo que le falta a cada punto
     pesos = calcular_pesos(pendiente)
     demanda = pendiente.groupby('CODIGO')['Ponderado'].sum()
     recibido = recibidos.groupby('CODIGO')['Transito'].sum() if recibidos is not None else None
     disp = calcular_disponible(stock_cedi, pedidos, demanda, recibido)
+    # Para mostrar en Reservas, la Demanda Mensual es solo consumo (los pendientes van en su propia columna)
     disp['Demanda_Mensual'] = np.ceil(disp['CODIGO'].map(pond_consumo.groupby('CODIGO')['Ponderado'].sum()).fillna(0)).astype(
         'int64')
     pesos, disp = cubrir_faltante_molecula(pesos, disp, mol_map, codigos_fomag, comerciales)
+
     disp['Enviado'] = disp['CODIGO'].map(enviado.groupby('CODIGO')['Enviado'].sum()).fillna(0).astype('int64')
     disp['Pendientes'] = (disp['CODIGO'].map(pendientes.groupby('CODIGO')['Pendientes'].sum()).fillna(0).astype('int64')
                           if pendientes is not None else 0)
+    disp['Stock_Punto'] = (np.rint(disp['CODIGO'].map(stock_puntos.groupby('CODIGO')['Stock_Punto'].sum()).fillna(0))
+                           .astype('int64') if stock_puntos is not None else 0)
     a_repartir = dict(zip(disp['CODIGO'], disp['Disponible']))
     if config.REDONDEO_BLISTER_ABASTECIMIENTO and unidades:
         #Redondeo por blister o caja según la rotacion de dispensacion de cada código
@@ -517,7 +582,7 @@ def generar_abastecimiento(df_prescrita,stock_cedi, pedidos,
     reservas = construir_reservas(disp, rep, info)
     consumos = hoja_consumos(df_prescrita, codigos_fomag, info)
     return exportar(matriz, matriz_transito, rep, enviado, pesos, disp, info, tabla, reservas, asignacion,
-                    consumos, ruta, pendientes=pendientes)
+                    consumos, ruta, pendientes=pendientes, stock_puntos=stock_puntos)
 
 def stock_cedi_desde_archivo(df, col_codigo='Codigo Articulo', col_cantidad='Unidades'):
     """Stock total del CEDI por código, sumando todos los lotes del mismo código.
@@ -593,16 +658,20 @@ def enriquecer_matriz(matriz, info, transito_total, col_codigo='CODIGO'):
 #     return sub[cols_final]
 
 def hoja_zona(consumos, rep, enviado, pesos, disp, info, bodegas_zona, col_codigo='CODIGO',
-              col_bodega='CODIGO BODEGA', pendientes=None):
+              col_bodega='CODIGO BODEGA', pendientes=None, stock_puntos=None):
     """Hoja de zona con la estructura de Consumos: una fila por código + punto de la zona, con los meses de consumo,
-    la demanda, los pendientes, el stock del CEDI para repartir, lo enviado, la necesidad, el sugerido y el estado."""
+    la demanda, los pendientes, el stock del CEDI para repartir, el stock del punto, lo enviado, la necesidad,
+    el sugerido y el estado."""
     llaves = [col_codigo, col_bodega]
     bodegas_zona = [str(b) for b in bodegas_zona]
     if pendientes is None:  # sin archivo de pendientes: tabla vacía, la columna sale en 0
         pendientes = pd.DataFrame(columns=llaves + ['Pendientes'])
+    if stock_puntos is None:  # sin Valorizado Puntos: tabla vacía, la columna sale en 0
+        stock_puntos = pd.DataFrame(columns=llaves + ['Stock_Punto'])
 
     # Todas las combinaciones código + punto: con consumo, con sugerido (incluye las que cubre la molécula),
-    # con enviado, con necesidad o con pendientes, aunque no se les envíe nada
+    # con enviado, con necesidad o con pendientes, aunque no se les envíe nada. Las que solo tienen stock en el
+    # punto (sin consumo, pendientes ni envío) no se agregan
     filas = pd.concat([consumos[llaves], rep[llaves], enviado[llaves], pesos[llaves], pendientes[llaves]],
                       ignore_index=True)
     filas = filas[filas[col_bodega].isin(bodegas_zona)].drop_duplicates().reset_index(drop=True)
@@ -612,15 +681,17 @@ def hoja_zona(consumos, rep, enviado, pesos, disp, info, bodegas_zona, col_codig
     sug = rep.groupby(llaves, as_index=False)['Unidades'].sum().rename(columns={'Unidades': 'Sugerido'})
     env = enviado.groupby(llaves, as_index=False)['Enviado'].sum()
     pend = pendientes.groupby(llaves, as_index=False)['Pendientes'].sum()
+    stk = stock_puntos.groupby(llaves, as_index=False)['Stock_Punto'].sum()
     nec = pesos.groupby(llaves, as_index=False)['Ponderado'].sum().rename(columns={'Ponderado': 'Necesidad'})
 
     h = (filas.merge(cons, on=llaves, how='left').merge(sug, on=llaves, how='left')
          .merge(env, on=llaves, how='left').merge(nec, on=llaves, how='left')
-         .merge(pend, on=llaves, how='left'))
+         .merge(pend, on=llaves, how='left').merge(stk, on=llaves, how='left'))
     h[cols_consumo] = h[cols_consumo].fillna(0)
     h['Sugerido'] = h['Sugerido'].fillna(0).astype('int64')
     h['Enviado'] = h['Enviado'].fillna(0).astype('int64')
     h['Pendientes'] = h['Pendientes'].fillna(0).astype('int64')
+    h['Stock Punto'] = np.rint(pd.to_numeric(h['Stock_Punto'], errors='coerce').fillna(0)).astype('int64')
     h['Necesidad'] = np.rint(h['Necesidad'].fillna(0)).astype('int64')
 
     zona = {b: z for z, bodegas in config.ZONAS_ABASTECIMIENTO.items() for b in bodegas}
@@ -631,12 +702,16 @@ def hoja_zona(consumos, rep, enviado, pesos, disp, info, bodegas_zona, col_codig
     stock = disp.set_index(col_codigo)['Stock_CEDI'] - disp.set_index(col_codigo)['Reserva_Comercial']
     h['Stock CEDI'] = h[col_codigo].map(stock).fillna(0).astype('int64')
 
-    # Se envía: hay cantidad por despachar. Sin stock: aún le falta y no hay. No se envía: lo enviado ya lo cubre
+    # Se envía: hay cantidad por despachar. Sin stock: aún le falta y no hay. No se envía: lo enviado o el stock
+    # del punto ya lo cubren. Sin rotación: no tiene demanda, pendientes ni envío
+    cubierto = (h['Enviado'] > 0) | ((h['Stock Punto'] > 0) & ((h['Demanda Mensual'] + h['Pendientes']) > 0))
     h['Estado'] = np.where(h['Sugerido'] > 0, 'SE ENVIA',
                            np.where(h['Necesidad'] > 0, 'SIN STOCK',
-                                    np.where(h['Enviado'] > 0, 'NO SE ENVIA', 'SIN ROTACIÓN')))
+                                    np.where(cubierto, 'NO SE ENVIA', 'SIN ROTACIÓN')))
 
-    nec_consumo = np.minimum(np.rint((h['Demanda Mensual'] - h['Enviado']).clip(lower=0)), h['Necesidad'])
+    # Lo que le falta de consumo: lo enviado y el stock del punto cubren primero el consumo
+    nec_consumo = np.minimum(np.rint((h['Demanda Mensual'] - h['Enviado'] - h['Stock Punto']).clip(lower=0)),
+                             h['Necesidad'])
     h['Solo Pendiente'] = np.minimum(h['Pendientes'], (h['Sugerido'] - nec_consumo).clip(lower=0)).astype('int64')
     h['Solo Sugerido'] = h['Sugerido'] - h['Solo Pendiente']
     h = h.rename(columns={'Sugerido': 'Sugerido + Pendiente'})
@@ -645,7 +720,7 @@ def hoja_zona(consumos, rep, enviado, pesos, disp, info, bodegas_zona, col_codig
     h = h.merge(info, on=col_codigo, how='left')
     info_cols = [c for c in info.columns if c != col_codigo]
     cols = ([col_codigo] + info_cols + ['Comentario', col_bodega, 'Sucursal', 'Zona'] + cols_consumo +
-            ['Pendientes', 'Stock CEDI', 'Enviado', 'Necesidad', 'Sugerido + Pendiente',
+            ['Pendientes', 'Stock CEDI', 'Stock Punto', 'Enviado', 'Necesidad', 'Sugerido + Pendiente',
              'Solo Sugerido', 'Solo Pendiente','Estado'])
     return h[cols].sort_values([col_codigo, 'Demanda Mensual'], ascending=[True, False]).reset_index(drop=True)
 
