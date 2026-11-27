@@ -1,6 +1,5 @@
 import io
 from fastapi import FastAPI, Request, File, UploadFile, Form
-from fastapi.templating import Jinja2Templates
 from datetime import date
 
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -8,6 +7,8 @@ from Scripts.main import cargar_datos, exportar_excel
 from Scripts.comun.lectura import leer_con_encabezado, leer_csv_pipe
 from Scripts.processor import ProyeccionProcessor
 from Scripts.comun.maestro import medicamentos_comerciales, codigos_fomag_desde_archivo
+from Scripts.comun.plantillas import templates
+from Scripts import menu
 
 from fastapi.staticfiles import StaticFiles
 import uuid
@@ -17,10 +18,10 @@ from Scripts import db, abastecimiento, calidad_temp, mejor_opcion
 
 app = FastAPI()
 app.include_router(calidad_temp.router)
+app.include_router(menu.router)
 resultados = {}
 MAX_RESULTADOS = 20   # dashboards guardados en memoria; al pasarse se descartan los mas viejos
 app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
 
 def _excel_response(df, filename):
     buffer = io.BytesIO()
@@ -272,12 +273,7 @@ def mejor_opcion_generar(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="Mejor-Opcion-{date.today():%Y-%m-%d}.xlsx"'},
     )
-@app.get("/compras")
-def compras_pagina(request: Request):
-    return templates.TemplateResponse(request, "compras.html", {"seccion":"compras"})
-@app.get("/inventarios")
-def inventarios_pagina(request: Request):
-    return templates.TemplateResponse(request, "inventarios.html", {"seccion":"inventarios"})
+
 @app.get("/abastecimiento/consumo")
 def abastecimiento_consumo(desde: str, hasta: str):
     df = db.consultar_abastecimiento(desde, hasta)
@@ -296,9 +292,6 @@ def rotacion_remisiones(desde: str, hasta: str):
 @app.get("/reparto")
 def reparto_pagina(request: Request):
     return templates.TemplateResponse(request, "reparto.html", {"seccion": "inventarios"})
-@app.get("/")
-def home(request: Request):
-    return templates.TemplateResponse(request, "home.html")
 
 @app.get("/proyeccion")
 def proyeccion(request: Request):
