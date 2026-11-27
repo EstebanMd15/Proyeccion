@@ -2,12 +2,13 @@ import io
 from fastapi import FastAPI, Request, File, UploadFile, Form
 from datetime import date
 
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from Scripts.main import cargar_datos, exportar_excel
 from Scripts.comun.lectura import leer_con_encabezado, leer_csv_pipe
 from Scripts.processor import ProyeccionProcessor
 from Scripts.comun.maestro import medicamentos_comerciales, codigos_fomag_desde_archivo
 from Scripts.comun.plantillas import templates
+from Scripts.comun.respuestas import respuesta_excel, respuesta_excel_df
 from Scripts import menu
 
 from fastapi.staticfiles import StaticFiles
@@ -23,15 +24,6 @@ resultados = {}
 MAX_RESULTADOS = 20   # dashboards guardados en memoria; al pasarse se descartan los mas viejos
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-def _excel_response(df, filename):
-    buffer = io.BytesIO()
-    df.to_excel(buffer, index=False)
-    buffer.seek(0)
-    return StreamingResponse(
-        buffer,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
 @app.post("/generar")
 def generar(request: Request,
         maestro: UploadFile | None = File(None),
@@ -101,10 +93,9 @@ def generar(request: Request,
                             status_code=400)
 
     if accion == "descargar":
-        return StreamingResponse(
+        return respuesta_excel(
             buffer,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f'attachment; filename="Proyeccion-{date.today():%Y-%m-%d}.xlsx"'},
+    f"Proyeccion-{date.today():%Y-%m-%d}.xlsx",
         )
 
 
@@ -169,10 +160,9 @@ def descargar(download_id: str):
     data = resultados.get(download_id)
     if data is None:
         return JSONResponse({"error": "Archivo no disponible. Genera la proyección de nuevo."}, status_code=404)
-    return StreamingResponse(
-        io.BytesIO(data["excel"]),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="Proyeccion-{date.today():%Y-%m-%d}.xlsx"'},
+    return respuesta_excel(
+        io.BytesIO(data['excel']),
+        f"Proyeccion-{date.today():%Y-%m-%d}.xlsx",
 
     )
 
@@ -230,10 +220,9 @@ def abastecimiento_reparto(
         return JSONResponse({"error": "No se pudo generar el reparto. Revisa que los archivos sean el Consumo, "
                                       "Valorizado CEDI, Proyección, Tránsito, Maestro, Pendientes y Contrato FOMAG. (" + str(e) + ")"},
                             status_code=400)
-    return StreamingResponse(
+    return respuesta_excel(
         buffer,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="Abastecimiento-{date.today():%Y-%m-%d}.xlsx"'},
+        f"Abastecimiento-{date.today():%Y-%m-%d}.xlsx",
     )
 
 @app.post("/compras/mejor-opcion")
@@ -268,27 +257,26 @@ def mejor_opcion_generar(
     except Exception as e:
         return JSONResponse({"error": "No se pudo generar el archivo 'Mejor Opción'. Revisa que los archivos sean, la proyección, "
                                       "el maestro, la lista de precio general y el contrato FOMAG. (" + str(e) + ")"}, status_code=400)
-    return StreamingResponse(
+    return respuesta_excel(
         buffer,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="Mejor-Opcion-{date.today():%Y-%m-%d}.xlsx"'},
+        f"Mejor-Opcion-{date.today():%Y-%m-%d}.xlsx",
     )
 
 @app.get("/abastecimiento/consumo")
 def abastecimiento_consumo(desde: str, hasta: str):
     df = db.consultar_abastecimiento(desde, hasta)
-    return _excel_response(df, "Consumo_Abastecimiento.xlsx")
+    return respuesta_excel_df(df, "Consumo_Abastecimiento.xlsx")
 @app.get("/abastecimiento")
 def abastecimiento_pagina(request: Request):
     return templates.TemplateResponse(request, "abastecimiento_consumo.html", {"seccion": "inventarios"})
 @app.get("/rotacion/dispensacion")
 def rotacion_dispensacion(desde: str, hasta: str):
     df = db.consultar_dispensacion(desde, hasta)
-    return _excel_response(df, "Rotacion_Dispensacion.xlsx")
+    return respuesta_excel_df(df, "Rotacion_Dispensacion.xlsx")
 @app.get("/rotacion/remisiones")
 def rotacion_remisiones(desde: str, hasta: str):
     df = db.consultar_remisiones(desde, hasta)
-    return _excel_response(df, "Rotacion_remisiones.xlsx")
+    return respuesta_excel_df(df, "Rotacion_remisiones.xlsx")
 @app.get("/reparto")
 def reparto_pagina(request: Request):
     return templates.TemplateResponse(request, "reparto.html", {"seccion": "inventarios"})
